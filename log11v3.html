@@ -1691,7 +1691,7 @@ high|custom_rule|Suspicious API call|/\/api\/internal\//i" style="font-family:mo
         <div class="card"><h3 class="card-title">YARA Rules</h3><p class="text-sm text-muted mb-2">Auto-generated YARA rules from detected attack patterns.</p><button class="btn w-full" id="expYara" style="width:100%;justify-content:center;">Download YARA</button></div>
         <div class="card"><h3 class="card-title">Suricata/Snort</h3><p class="text-sm text-muted mb-2">IDS rules for Suricata and Snort from detected signatures + IP blocklist.</p><button class="btn w-full" id="expSuricata" style="width:100%;justify-content:center;">Download Rules</button></div>
         <div class="card"><h3 class="card-title">Microsoft Sentinel KQL</h3><p class="text-sm text-muted mb-2">KQL hunt queries for Microsoft Sentinel / Azure Log Analytics.</p><button class="btn w-full" id="expKQL" style="width:100%;justify-content:center;">Download KQL</button></div>
-        <div class="card"><h3 class="card-title">Power BI Dashboard</h3><p class="text-sm text-muted mb-2">M queries, DAX measures, and step-by-step instructions to build a full Sentinel dashboard in Power BI.</p><button class="btn w-full" id="expPowerBI" style="width:100%;justify-content:center;">Download Power BI Pack</button></div>
+        <div class="card"><h3 class="card-title">Power BI Dashboard</h3><p class="text-sm text-muted mb-2">Export data as JSON, then use the Power BI Builder (separate HTML file) to create a .pbit template file you can open directly in Power BI Desktop.</p><button class="btn btn-primary w-full" id="expPowerBI" style="width:100%;justify-content:center;">Download Power BI JSON Data</button><button class="btn w-full mt-1" id="expPowerBISetup" style="width:100%;justify-content:center;margin-top:0.5rem;">Download Setup Guide</button><p class="text-xs text-muted mt-1">Then open <strong>powerbi-builder.html</strong> (in the same folder) to generate the .pbit template file.</p></div>
       </div>
     </section>
 
@@ -8686,6 +8686,12 @@ const UI = {
     document.getElementById('expSuricata').addEventListener('click', () => this.exportSuricata());
     document.getElementById('expKQL').addEventListener('click', () => this.exportKQL());
     document.getElementById('expPowerBI').addEventListener('click', () => this.exportPowerBI());
+    document.getElementById('expPowerBISetup').addEventListener('click', () => {
+      if (this._pbiSetupData) {
+        const { mCode, daxMeasures, instructions } = this._pbiSetupData;
+        this.download(mCode + '\n\n' + daxMeasures + '\n\n' + instructions, 'sentinel_powerbi_setup.txt', 'text/plain');
+      } else { this.toast('Generate Power BI data first', 'warn'); }
+    });
   },
 
   addFiles(files) {
@@ -16748,22 +16754,102 @@ level: ${e.sev}
 # ==========================================
 `;
 
-    // 5. Download everything as a pack
-    // First download the CSVs
-    let delay = 0;
-    for (const [name, csv] of Object.entries(csvFiles)) {
-      setTimeout(() => this.download(csv, name, 'text/csv;charset=utf-8'), delay);
-      delay += 300;
-    }
-    // Then the M queries, DAX, and instructions
-    setTimeout(() => this.download(mCode, 'sentinel_powerbi_queries.m', 'text/plain'), delay);
-    delay += 300;
-    setTimeout(() => this.download(daxMeasures, 'sentinel_powerbi_dax.dax', 'text/plain'), delay);
-    delay += 300;
-    setTimeout(() => this.download(instructions, 'sentinel_powerbi_README.md', 'text/plain'), delay);
-    delay += 300;
+    // 5. Bundle everything into ONE JSON file that Power BI reads directly.
+    // Power BI → Get Data → JSON → select this file → all 8 tables appear as records.
+    const bundle = {
+      _meta: {
+        tool: 'Sentinel Log Analyzer v3',
+        generated: new Date().toISOString(),
+        files: s.files.map(f => f.name),
+        tables: ['Events','IPs','Categories','Timeline','MITRE','CVEs','WAF_Bypass','Summary'],
+        instructions: 'Open Power BI Desktop → Get Data → JSON → select this file. Each table appears as a record. Click the expand arrow to load columns. See README below for dashboard layout.'
+      },
+      Events: s.events.map((e, idx) => {
+        const dt = e.ts ? new Date(e.ts) : null;
+        return {
+          EventID: idx+1, Timestamp: fmtTs(e.ts), Date: fmtDate(e.ts), Time: fmtTime(e.ts),
+          Hour: dt ? dt.getUTCHours() : null, DayOfWeek: dt ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getUTCDay()] : '',
+          Severity: e.sev, SeverityOrder: e.sev==='critical'?1:e.sev==='high'?2:e.sev==='medium'?3:4,
+          Category: e.cat, CategoryGroup: /sql/i.test(e.cat)?'Injection':/xss/i.test(e.cat)?'XSS':/traversal/i.test(e.cat)?'File Access':/auth/i.test(e.cat)?'Authentication':/recon|scan/i.test(e.cat)?'Reconnaissance':/command|rce/i.test(e.cat)?'Execution':/cve|log4|spring/i.test(e.cat)?'CVE Exploit':'Other',
+          IP: e.ip, Method: e.method||'', Status: e.status||0, StatusGroup: (e.status>=500?'5xx':e.status>=400?'4xx':e.status>=300?'3xx':e.status>=200?'2xx':'Other'),
+          TimeTaken_ms: e.timeTaken||null, URL: (e.url||'').substring(0,300), Endpoint: (e.url||'').split('?')[0].substring(0,200),
+          Description: (e.desc||'').substring(0,200), MITRE: (e.mitre||[]).join(';'), CVE: (e.cve||[]).join(';'),
+          Confirmed: e.confirmed?'YES':'NO', Confidence: Math.round((e.confidence||0)*100), WAF_Bypass: (e.status===200&&(e.sev==='critical'||e.sev==='high'))?'YES':'NO',
+          BytesOut: e.bytesOut||null
+        };
+      }),
+      IPs: Object.values(s.ipActivity).filter(a=>a.requests>0).sort((a,b)=>b.threatScore-a.threatScore).map(a => ({
+        IP: a.ip, ThreatScore: a.threatScore, ThreatLevel: a.threatLevel,
+        RiskBucket: a.threatScore>=75?'Critical':a.threatScore>=50?'High':a.threatScore>=25?'Medium':'Low',
+        Requests: a.requests, Events: a.events, CriticalEvents: a.criticalHits||0, HighEvents: a.highHits||0,
+        Failed: a.failed, ErrorRate_Pct: a.requests>0?Math.round(a.failed/a.requests*100):0,
+        UniqueURLs: a.urls.size, Categories: Array.from(a.categories).join(';'), CategoryCount: a.categories.size,
+        Tools: Array.from(a.tools).join(';'), ToolCount: a.tools.size,
+        SkillTier: a.skillProfile?.tier||'unknown', AnomalyScore: a.anomalyScore||0, IsolationForest: a.iforestScore||0,
+        IsAnomaly: a.iforestAnomaly?'YES':'NO', Beaconing: a.beaconing?'YES':'NO', BeaconInterval_s: a.beaconInterval||null,
+        GeoCode: a.geo?.code||'', GeoName: a.geo?.name||'',
+        Timezone: a.timezoneProfile?.likelyTimezone||'', TimezonePattern: a.timezoneProfile?.pattern||'',
+        BusinessHoursPct: a.timezoneProfile?.businessHoursConcentration||null,
+        FirstSeen: fmtTs(a.firstSeen), LastSeen: fmtTs(a.lastSeen),
+        RareURLCount: a.rareUrlCount||0, SequenceType: a.sequencePredictability||''
+      })),
+      Categories: Object.entries(s.categories).sort((a,b)=>b[1]-a[1]).map(([cat, count]) => {
+        const info = PayloadExplainer._CATEGORY_INFO[cat] || PayloadExplainer._CATEGORY_INFO.default;
+        return { Category: cat, CategoryName: info.name, EventCount: count,
+          UniqueIPs: new Set(s.events.filter(e=>e.cat===cat).map(e=>e.ip)).size,
+          MaxSeverity: s.events.filter(e=>e.cat===cat).reduce((m,e)=>SEV[e.sev]>SEV[m]?e.sev:m,'low'),
+          WAFRuleFamily: info.wafRule, ConfirmedExploits: s.events.filter(e=>e.cat===cat&&e.confirmed).length
+        };
+      }),
+      Timeline: Object.entries(s.stats.hours).sort().map(([h, count]) => {
+        const dt = new Date(h.replace('T',' ')+':00:00Z');
+        return { DateTimeHour: h, Date: fmtDate(dt.getTime()), Hour: dt.getUTCHours(),
+          DayOfWeek: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getUTCDay()],
+          TotalRequests: count,
+          SecurityEvents: s.events.filter(e=>e.ts&&new Date(e.ts).toISOString().substring(0,13)===h).length,
+          CriticalEvents: s.events.filter(e=>e.ts&&new Date(e.ts).toISOString().substring(0,13)===h&&e.sev==='critical').length,
+          UniqueIPs: new Set(s.events.filter(e=>e.ts&&new Date(e.ts).toISOString().substring(0,13)===h).map(e=>e.ip)).size
+        };
+      }),
+      MITRE: Object.entries(s.mitreHits).sort((a,b)=>b[1]-a[1]).map(([t, count]) => ({
+        TechniqueID: t, TechniqueName: (MITRE_TECHNIQUES[t]||{}).name||'', Tactic: (MITRE_TECHNIQUES[t]||{}).tactic||'',
+        Hits: count, UniqueIPs: new Set(s.events.filter(e=>(e.mitre||[]).includes(t)).map(e=>e.ip)).size
+      })),
+      CVEs: Object.entries(s.cveHits).sort((a,b)=>b[1]-a[1]).map(([id, count]) => {
+        const info = CVE_TABLE[id] || {};
+        const evs = s.events.filter(e=>(e.cve||[]).includes(id));
+        return { CVE_ID: id, CVE_Name: info.name||'', Product: info.product||'', CVSS: info.cvss||null,
+          Hits: count, UniqueIPs: new Set(evs.map(e=>e.ip)).size, Confirmed: evs.some(e=>e.confirmed)?'YES':'NO',
+          Status200_Count: evs.filter(e=>e.status===200).length
+        };
+      }),
+      WAF_Bypass: Object.entries(s.categories).sort((a,b)=>b[1]-a[1]).map(([cat, count]) => {
+        const info = PayloadExplainer._CATEGORY_INFO[cat] || PayloadExplainer._CATEGORY_INFO.default;
+        const evs = s.events.filter(e=>e.cat===cat&&!e.suppressed);
+        return { Category: cat, CategoryName: info.name, TotalBypasses: count,
+          WeightedRisk: evs.reduce((sum,e)=>sum+(e.sev==='critical'?10:e.sev==='high'?5:e.sev==='medium'?2:1),0),
+          ConfirmedExploits: evs.filter(e=>e.confirmed).length,
+          UniqueIPs: new Set(evs.map(e=>e.ip)).size,
+          MissingWAFRule: info.wafRule, RadwareFix: (info.radware||'').substring(0,200)
+        };
+      }),
+      Summary: {
+        TotalEvents: s.events.length, CriticalEvents: s.stats.criticalEvents||0, HighEvents: s.stats.highEvents||0,
+        ThreatScore: s.threatScore, ThreatLevel: s.threatLevel,
+        UniqueIPs: Object.keys(s.ipActivity).length,
+        HighRiskIPs: Object.values(s.ipActivity).filter(a=>a.threatScore>=50).length,
+        ConfirmedExploits: s.events.filter(e=>e.confirmed).length,
+        BreachIndicators: (s.breachIndicators||[]).length,
+        CVEsDetected: Object.keys(s.cveHits).length,
+        MITRETechniques: Object.keys(s.mitreHits).length,
+        AnalysisDate: new Date().toISOString()
+      }
+    };
 
-    setTimeout(() => this.toast('Power BI pack downloaded — 8 data tables + M queries + 30 DAX measures + 6-page dashboard guide. Open the README and follow the steps.', 'ok'), delay);
+    // Download the JSON data file
+    this.download(JSON.stringify(bundle, null, 2), 'sentinel_powerbi_data.json', 'application/json');
+    this.toast('JSON data downloaded. Now open powerbi-builder.html to generate the .pbit template, or import the JSON directly in Power BI (Get Data → JSON).', 'ok');
+    this._pbiSetupData = { mCode, daxMeasures, instructions };
   },
 
   download(content, name, type) {

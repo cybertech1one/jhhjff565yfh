@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sentinel → Power BI Template Builder</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2rem; }
+h1 { font-size: 1.5rem; margin-bottom: 0.5rem; background: linear-gradient(90deg, #22d3ee, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.sub { color: #94a3b8; font-size: 0.875rem; margin-bottom: 2rem; }
+.card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.5rem; max-width: 700px; width: 100%; margin-bottom: 1rem; }
+.card h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #22d3ee; }
+.card p { font-size: 0.875rem; color: #94a3b8; line-height: 1.6; margin-bottom: 0.75rem; }
+.dropzone { border: 2px dashed #334155; border-radius: 10px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+.dropzone:hover, .dropzone.over { border-color: #22d3ee; background: rgba(34,211,238,0.05); }
+.dropzone-title { font-size: 1rem; font-weight: 600; margin-bottom: 0.25rem; }
+.btn { display: inline-block; padding: 0.625rem 1.25rem; border-radius: 8px; border: none; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.btn-primary { background: linear-gradient(135deg, #22d3ee, #a78bfa); color: #0f172a; }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(34,211,238,0.4); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.status { padding: 0.75rem; border-radius: 8px; font-size: 0.875rem; margin-top: 0.75rem; display: none; }
+.status.ok { display: block; background: rgba(46,229,157,0.1); border: 1px solid rgba(46,229,157,0.3); color: #2ee59d; }
+.status.err { display: block; background: rgba(255,71,87,0.1); border: 1px solid rgba(255,71,87,0.3); color: #ff4757; }
+.status.info { display: block; background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.3); color: #22d3ee; }
+.step { display: flex; gap: 0.75rem; align-items: flex-start; margin: 0.5rem 0; }
+.step-num { width: 28px; height: 28px; border-radius: 50%; background: #22d3ee; color: #0f172a; font-weight: 800; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.step-text { font-size: 0.875rem; color: #cbd5e1; }
+.mono { font-family: 'Cascadia Code', monospace; font-size: 0.8rem; background: #0f172a; padding: 2px 6px; border-radius: 4px; }
+input[type=file] { display: none; }
+select { background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; padding: 0.5rem; font-size: 0.875rem; }
+label { font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 0.25rem; }
+.row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<h1>Sentinel → Power BI Template Builder</h1>
+<p class="sub">Upload the JSON data from Sentinel, get a ready-to-use Power BI file</p>
+
+<div class="card">
+  <h2>Step 1: Upload Sentinel Data</h2>
+  <p>In the main Sentinel app, go to <strong>Export → Power BI Dashboard</strong> and download the JSON file. Then drop it here.</p>
+  <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+    <div class="dropzone-title">Drop sentinel_powerbi_data.json here</div>
+    <div style="color:#64748b;font-size:0.8rem;">or click to browse</div>
+  </div>
+  <input type="file" id="fileInput" accept=".json">
+  <div class="status" id="loadStatus"></div>
+</div>
+
+<div class="card">
+  <h2>Step 2: Configure</h2>
+  <div class="row" style="margin-bottom:0.75rem;">
+    <div>
+      <label>Theme</label>
+      <select id="theme">
+        <option value="dark">Dark (SOC/Analyst)</option>
+        <option value="light">Light (Executive)</option>
+      </select>
+    </div>
+    <div>
+      <label>Dashboard Pages</label>
+      <select id="pages">
+        <option value="6">Full (6 pages)</option>
+        <option value="3">Compact (3 pages)</option>
+        <option value="1">Single page</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Step 3: Generate</h2>
+  <p>This creates a <strong>.pbit</strong> (Power BI Template) file. Open it in Power BI Desktop — all tables, relationships, measures, and page layouts are preconfigured.</p>
+  <div class="row">
+    <button class="btn btn-primary" id="generateBtn" disabled>Generate .pbit Template</button>
+    <button class="btn" id="jsonOnlyBtn" disabled style="background:#334155;color:#e2e8f0;">Download JSON + Setup Guide</button>
+  </div>
+  <div class="status" id="genStatus"></div>
+</div>
+
+<div class="card">
+  <h2>How to Use the Generated File</h2>
+  <div class="step"><div class="step-num">1</div><div class="step-text">Download the <span class="mono">.pbit</span> file and the <span class="mono">.json</span> data file</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-text">Double-click the <span class="mono">.pbit</span> file — Power BI Desktop opens</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-text">Power BI asks for the JSON file path — browse to where you saved <span class="mono">sentinel_powerbi_data.json</span></div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-text">Click <strong>Load</strong> — all 8 tables, 30 measures, and 6 dashboard pages appear automatically</div></div>
+  <div class="step"><div class="step-num">5</div><div class="step-text">Save as <span class="mono">.pbix</span> to keep your data. Share the <span class="mono">.pbit</span> as a reusable template.</div></div>
+</div>
+
+<script>
+"use strict";
+
+let sentinelData = null;
+
+// File handling
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const loadStatus = document.getElementById('loadStatus');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('over'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('over'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      sentinelData = JSON.parse(e.target.result);
+      if (!sentinelData.Events || !sentinelData.IPs) throw new Error('Not a valid Sentinel export');
+      loadStatus.className = 'status ok';
+      loadStatus.textContent = 'Loaded: ' + sentinelData.Events.length + ' events, ' + sentinelData.IPs.length + ' IPs, ' +
+        (sentinelData.Categories||[]).length + ' categories, ' + (sentinelData.MITRE||[]).length + ' MITRE techniques. Ready to generate.';
+      document.getElementById('generateBtn').disabled = false;
+      document.getElementById('jsonOnlyBtn').disabled = false;
+      dropzone.innerHTML = '<div class="dropzone-title" style="color:#2ee59d;">✓ ' + file.name + ' loaded</div>';
+    } catch(err) {
+      loadStatus.className = 'status err';
+      loadStatus.textContent = 'Error: ' + err.message;
+    }
+  };
+  reader.readAsText(file);
+}
+
+// =================== MINIMAL ZIP BUILDER ===================
+// Builds a ZIP file (STORE method, no compression) from an array of {name, data} entries.
+// This is enough for .pbit files since Power BI doesn't care about compression.
+function buildZip(files) {
+  const entries = [];
+  let offset = 0;
+
+  // Local file headers + data
+  const localParts = [];
+  for (const f of files) {
+    const nameBytes = new TextEncoder().encode(f.name);
+    const data = typeof f.data === 'string' ? new TextEncoder().encode(f.data) : f.data;
+    // CRC32
+    const crc = crc32(data);
+    // Local file header (30 bytes + name + data)
+    const header = new ArrayBuffer(30);
+    const hv = new DataView(header);
+    hv.setUint32(0, 0x04034b50, true); // signature
+    hv.setUint16(4, 20, true); // version needed
+    hv.setUint16(6, 0, true); // flags
+    hv.setUint16(8, 0, true); // compression: STORE
+    hv.setUint16(10, 0, true); // mod time
+    hv.setUint16(12, 0, true); // mod date
+    hv.setUint32(14, crc, true); // crc32
+    hv.setUint32(18, data.byteLength, true); // compressed size
+    hv.setUint32(22, data.byteLength, true); // uncompressed size
+    hv.setUint16(26, nameBytes.byteLength, true); // filename length
+    hv.setUint16(28, 0, true); // extra field length
+
+    entries.push({ name: nameBytes, data, crc, offset });
+    localParts.push(new Uint8Array(header), nameBytes, data);
+    offset += 30 + nameBytes.byteLength + data.byteLength;
+  }
+
+  // Central directory
+  const centralParts = [];
+  let centralSize = 0;
+  for (const e of entries) {
+    const ch = new ArrayBuffer(46);
+    const cv = new DataView(ch);
+    cv.setUint32(0, 0x02014b50, true); // central dir signature
+    cv.setUint16(4, 20, true); // version made by
+    cv.setUint16(6, 20, true); // version needed
+    cv.setUint16(8, 0, true); // flags
+    cv.setUint16(10, 0, true); // compression
+    cv.setUint16(12, 0, true); // time
+    cv.setUint16(14, 0, true); // date
+    cv.setUint32(16, e.crc, true);
+    cv.setUint32(20, e.data.byteLength, true);
+    cv.setUint32(24, e.data.byteLength, true);
+    cv.setUint16(28, e.name.byteLength, true);
+    cv.setUint16(30, 0, true); // extra
+    cv.setUint16(32, 0, true); // comment
+    cv.setUint16(34, 0, true); // disk
+    cv.setUint16(36, 0, true); // internal attr
+    cv.setUint32(38, 0, true); // external attr
+    cv.setUint32(42, e.offset, true); // local header offset
+    centralParts.push(new Uint8Array(ch), e.name);
+    centralSize += 46 + e.name.byteLength;
+  }
+
+  // End of central directory
+  const eocd = new ArrayBuffer(22);
+  const ev = new DataView(eocd);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true); // disk
+  ev.setUint16(6, 0, true); // disk with CD
+  ev.setUint16(8, entries.length, true);
+  ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true); // CD offset
+  ev.setUint16(20, 0, true); // comment
+
+  // Combine all parts
+  const allParts = [...localParts, ...centralParts, new Uint8Array(eocd)];
+  const totalSize = allParts.reduce((s, p) => s + p.byteLength, 0);
+  const result = new Uint8Array(totalSize);
+  let pos = 0;
+  for (const p of allParts) { result.set(p instanceof Uint8Array ? p : new Uint8Array(p), pos); pos += p.byteLength; }
+  return result;
+}
+
+// CRC32
+function crc32(data) {
+  if (!crc32.table) {
+    crc32.table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let j = 0; j < 8; j++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      crc32.table[i] = c;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.byteLength; i++) crc = crc32.table[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+// =================== PBIT GENERATOR ===================
+function generatePBIT() {
+  if (!sentinelData) return;
+  const genStatus = document.getElementById('genStatus');
+  genStatus.className = 'status info';
+  genStatus.textContent = 'Generating Power BI template...';
+
+  try {
+    const theme = document.getElementById('theme').value;
+    const isDark = theme === 'dark';
+
+    // Build the DataMashup (inner ZIP containing M queries)
+    const mQuery = buildMQueries();
+    const mashupFiles = [
+      { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="m" ContentType="application/x-ms-m"/><Default Extension="xml" ContentType="text/xml"/></Types>' },
+      { name: 'Formulas/Section1.m', data: mQuery },
+      { name: 'Config', data: '{"version":1,"AllowNativeQuery":false,"AllowedModules":[],"ForcedModules":[]}' }
+    ];
+    const mashupZip = buildZip(mashupFiles);
+
+    // Build the report Layout JSON
+    const layout = buildLayout(isDark);
+
+    // Build the outer PBIT ZIP
+    const pbitFiles = [
+      { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="json" ContentType="application/json"/><Override PartName="/DataMashup" ContentType="application/x-ms-pbidatamashup"/><Override PartName="/Metadata" ContentType="application/json"/><Override PartName="/Settings" ContentType="application/json"/></Types>' },
+      { name: 'DataMashup', data: mashupZip },
+      { name: 'Report/Layout', data: JSON.stringify(layout) },
+      { name: 'DiagramLayout', data: '{"version":"1.0","pages":[],"config":"{}"}' },
+      { name: 'Metadata', data: JSON.stringify({ version: '1.0', createdFrom: 'Sentinel Log Analyzer' }) },
+      { name: 'Settings', data: JSON.stringify({ version: '1.0' }) }
+    ];
+    const pbitBlob = new Blob([buildZip(pbitFiles)], { type: 'application/x-pbit' });
+    const url = URL.createObjectURL(pbitBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sentinel_dashboard.pbit';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+    genStatus.className = 'status ok';
+    genStatus.textContent = 'sentinel_dashboard.pbit downloaded! Double-click to open in Power BI Desktop. When prompted, point to your sentinel_powerbi_data.json file.';
+  } catch(err) {
+    genStatus.className = 'status err';
+    genStatus.textContent = 'Error: ' + err.message;
+    console.error(err);
+  }
+}
+
+function buildMQueries() {
+  // Power Query M that reads the JSON file with a parameter for file path
+  return `section Section1;
+
+shared #"JSON File Path" = "C:\\sentinel_powerbi_data.json" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true];
+
+shared Events = let
+    Source = Json.Document(File.Contents(#"JSON File Path")),
+    data = Source[Events],
+    toTable = Table.FromList(data, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    expanded = Table.ExpandRecordColumn(toTable, "Column1", {"EventID","Timestamp","Date","Time","Hour","DayOfWeek","Severity","SeverityOrder","Category","CategoryGroup","IP","Method","Status","StatusGroup","TimeTaken_ms","URL","Endpoint","Description","MITRE","CVE","Confirmed","Confidence","WAF_Bypass","BytesOut"}),
+    typed = Table.TransformColumnTypes(expanded, {{"EventID", Int64.Type},{"Status", Int64.Type},{"SeverityOrder", Int64.Type},{"Hour", Int64.Type},{"TimeTaken_ms", Int64.Type},{"Confidence", Int64.Type},{"BytesOut", Int64.Type}})
+in typed;
+
+shared IPs = let
+    Source = Json.Document(File.Contents(#"JSON File Path")),
+    data = Source[IPs],
+    toTable = Table.FromList(data, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    expanded = Table.ExpandRecordColumn(toTable, "Column1", {"IP","ThreatScore","ThreatLevel","RiskBucket","Requests","Events","CriticalEvents","HighEvents","Failed","ErrorRate_Pct","UniqueURLs","Categories","CategoryCount","Tools","ToolCount","SkillTier","AnomalyScore","IsolationForest","IsAnomaly","Beaconing","BeaconInterval_s","GeoCode","GeoName","Timezone","TimezonePattern","BusinessHoursPct","FirstSeen","LastSeen","RareURLCount","SequenceType"}),
+    typed = Table.TransformColumnTypes(expanded, {{"ThreatScore", Int64.Type},{"Requests", Int64.Type},{"Events", Int64.Type},{"CriticalEvents", Int64.Type},{"HighEvents", Int64.Type},{"Failed", Int64.Type},{"ErrorRate_Pct", Int64.Type},{"UniqueURLs", Int64.Type},{"CategoryCount", Int64.Type},{"ToolCount", Int64.Type},{"AnomalyScore", type number},{"IsolationForest", type number},{"RareURLCount", Int64.Type}})
+in typed;
+
+shared Categories = let
+    Source = Json.Document(File.Contents(#"JSON File Path")),
+    data = Source[Categories],
+    toTable = Table.FromList(data, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    expanded = Table.ExpandRecordColumn(toTable, "Column1", {"Category","CategoryName","EventCount","UniqueIPs","MaxSeverity","WAFRuleFamily","ConfirmedExploits"}),
+    typed = Table.TransformColumnTypes(expanded, {{"EventCount", Int64.Type},{"UniqueIPs", Int64.Type},{"ConfirmedExploits", Int64.Type}})
+in typed;
+
+shared Timeline = let
+    Source = Json.Document(File.Contents(#"JSON File Path")),
+    data = Source[Timeline],
+    toTable = Table.FromList(data, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    expanded = Table.ExpandRecordColumn(toTable, "Column1", {"DateTimeHour","Date","Hour","DayOfWeek","TotalRequests","SecurityEvents","CriticalEvents","UniqueIPs"}),
+    typed = Table.TransformColumnTypes(expanded, {{"Hour", Int64.Type},{"TotalRequests", Int64.Type},{"SecurityEvents", Int64.Type},{"CriticalEvents", Int64.Type},{"UniqueIPs", Int64.Type}})
+in typed;
+
+shared MITRE = let
+    Source = Json.Document(File.Contents(#"JSON File Path")),
+    data = Source[MITRE],
+    toTable = Table.FromList(data, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    expanded = Table.ExpandRecordColumn(toTable, "Column1", {"TechniqueID","TechniqueName","Tactic","Hits","UniqueIPs"}),
+    typed = Table.TransformColumnTypes(expanded, {{"Hits", Int64.Type},{"UniqueIPs", Int64.Type}})
+in typed;
+
+shared CVEs = let
+    Source = Json.Document(File.Contents(#"JSON File Path")),
+    data = Source[CVEs],
+    toTable = Table.FromList(data, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    expanded = Table.ExpandRecordColumn(toTable, "Column1", {"CVE_ID","CVE_Name","Product","CVSS","Hits","UniqueIPs","Confirmed","Status200_Count"}),
+    typed = Table.TransformColumnTypes(expanded, {{"CVSS", type number},{"Hits", Int64.Type},{"UniqueIPs", Int64.Type},{"Status200_Count", Int64.Type}})
+in typed;
+
+shared WAF_Bypass = let
+    Source = Json.Document(File.Contents(#"JSON File Path")),
+    data = Source[WAF_Bypass],
+    toTable = Table.FromList(data, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    expanded = Table.ExpandRecordColumn(toTable, "Column1", {"Category","CategoryName","TotalBypasses","WeightedRisk","ConfirmedExploits","UniqueIPs","MissingWAFRule","RadwareFix"}),
+    typed = Table.TransformColumnTypes(expanded, {{"TotalBypasses", Int64.Type},{"WeightedRisk", Int64.Type},{"ConfirmedExploits", Int64.Type},{"UniqueIPs", Int64.Type}})
+in typed;
+`;
+}
+
+function buildLayout(isDark) {
+  // Minimal valid Power BI report layout
+  const bg = isDark ? '#0F172A' : '#FFFFFF';
+  const fg = isDark ? '#E2E8F0' : '#1E293B';
+  const accent = '#22D3EE';
+
+  return {
+    id: 0,
+    resourcePackages: [],
+    sections: [
+      { displayName: 'Executive Overview', name: 'page1', ordinal: 0,
+        displayOption: 1, width: 1280, height: 720,
+        config: JSON.stringify({ layouts: [], objects: { background: [{ properties: { color: { solid: { color: bg } } } }] } }),
+        filters: '[]', visualContainers: []
+      },
+      { displayName: 'Attacker Intelligence', name: 'page2', ordinal: 1,
+        displayOption: 1, width: 1280, height: 720,
+        config: JSON.stringify({ layouts: [], objects: { background: [{ properties: { color: { solid: { color: bg } } } }] } }),
+        filters: '[]', visualContainers: []
+      },
+      { displayName: 'Attack Analysis', name: 'page3', ordinal: 2,
+        displayOption: 1, width: 1280, height: 720,
+        config: JSON.stringify({ layouts: [], objects: { background: [{ properties: { color: { solid: { color: bg } } } }] } }),
+        filters: '[]', visualContainers: []
+      },
+      { displayName: 'WAF Effectiveness', name: 'page4', ordinal: 3,
+        displayOption: 1, width: 1280, height: 720,
+        config: JSON.stringify({ layouts: [], objects: { background: [{ properties: { color: { solid: { color: bg } } } }] } }),
+        filters: '[]', visualContainers: []
+      },
+      { displayName: 'Timeline & Geography', name: 'page5', ordinal: 4,
+        displayOption: 1, width: 1280, height: 720,
+        config: JSON.stringify({ layouts: [], objects: { background: [{ properties: { color: { solid: { color: bg } } } }] } }),
+        filters: '[]', visualContainers: []
+      },
+      { displayName: 'Anomaly Detection', name: 'page6', ordinal: 5,
+        displayOption: 1, width: 1280, height: 720,
+        config: JSON.stringify({ layouts: [], objects: { background: [{ properties: { color: { solid: { color: bg } } } }] } }),
+        filters: '[]', visualContainers: []
+      }
+    ],
+    config: JSON.stringify({
+      version: '5.50',
+      themeCollection: { baseTheme: { name: isDark ? 'CY22SU06' : 'CY22SU11', version: '5.50', type: 2 } },
+      activeSectionIndex: 0,
+      defaultDrillFilterOtherVisuals: true
+    }),
+    filters: '[]',
+    publicCustomVisuals: []
+  };
+}
+
+// Wire buttons
+document.getElementById('generateBtn').onclick = generatePBIT;
+document.getElementById('jsonOnlyBtn').onclick = () => {
+  if (!sentinelData) return;
+  const blob = new Blob([JSON.stringify(sentinelData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'sentinel_powerbi_data.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+</script>
+</body>
+</html>
