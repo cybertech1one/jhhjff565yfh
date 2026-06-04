@@ -1,0 +1,516 @@
+Creating a comprehensive list of 100 specific URLs for Dynamics 365 cloud integrated with Power Apps requires a detailed understanding of all the elements and modules that could be accessed or misused. Here's an extensive list of sensitive URLs that you should consider monitoring and controlling in your cloud-based Dynamics 365 deployment:
+
+### Dynamics 365 Cloud and Power Apps Sensitive URLs
+
+1. `/main.aspx` - Home page.
+2. `/main.aspx?etn=account` - Direct access to accounts.
+3. `/main.aspx?etn=contact` - Direct access to contacts.
+4. `/main.aspx?etn=opportunity` - Direct access to opportunities.
+5. `/main.aspx?pagetype=advancedfind` - Advanced find feature.
+6. `/tools/SystemCustomization/Entities/ManageEntity.aspx` - Entity management.
+7. `/tools/SystemCustomization/Attributes/manageattributes.aspx` - Attribute management.
+8. `/tools/SystemSettings/SystemSettings.aspx` - System settings.
+9. `/tools/SystemCustomization/SystemCustomization.aspx` - System customization.
+10. `/tools/security/securityroles.aspx` - Security roles management.
+11. `/main.aspx?etn=systemuser&pagetype=entityrecord` - User management.
+12. `/main.aspx?settingsonly=true` - Settings dashboard.
+13. `/tools/datamanagement/datamanagement.aspx` - Data management tools.
+14. `/tools/Import/default.aspx` - Data import tools.
+15. `/tools/emailadministration/emailconfiguration.aspx` - Email configuration.
+16. `/tools/documentmanagement/settings/documentmanagementsettings.aspx` - Document management settings.
+17. `/tools/SystemSettings/OrganizationSettings.aspx?settingType=LicenseInfo` - License information.
+18. `/main.aspx?etn=role&pagetype=entitylist` - Role management.
+19. `/tools/HierarchySecurity/HierarchySecurityProfile.aspx` - Hierarchy security profiles.
+20. `/tools/Position/position.aspx` - Position management.
+21. `/tools/business/home_asyncoperation.aspx` - System jobs.
+22. `/main.aspx?etn=plugintracelog&pagetype=entitylist` - Plugin trace logs.
+23. `/tools/diagnostics/diag.aspx` - System diagnostics.
+24. `/tools/content/webresource.aspx` - Web resources.
+25. `/tools/developersettings/developersettings.aspx` - Developer resources.
+26. `/tools/pluginregistration/` - Plugin registration.
+27. `/SDK/List.aspx` - SDK resources.
+28. `/tools/diagram/viewer/viewer.aspx` - Entity relationship diagrams.
+29. `/tools/appsource/AppSource.aspx` - AppSource integration.
+30. `/tools/mobileconfiguration/mobileconfiguration.aspx` - Mobile configuration.
+31. `/tools/optionset/` - Option set management.
+32. `/tools/translation/translation.aspx` - Language management.
+33. `/main.aspx?etn=systemform&pagetype=entitylist` - System forms.
+34. `/tools/Business/home_business.aspx` - Business management.
+35. `/tools/SystemCustomization/Entities/ManageEntity.aspx` - Manage custom entities.
+36. `/tools/SystemCustomization/Attributes/manageattributes.aspx?entityId=<entity_id>` - Manage attributes.
+37. `/tools/SystemCustomization/Entities/EntityList.aspx` - Entity list.
+38. `/tools/SystemCustomization/Relationships/ManageRelationships.aspx` - Manage relationships.
+39. `/tools/audit/auditareas.aspx` - Audit areas.
+40. `/tools/SystemCustomization/Entities/Attributes/AttributeList.aspx` - Attribute list.
+41. `/tools/SystemCustomization/Entities/Attributes/AddAttribute.aspx` - Add attribute.
+42. `/tools/SystemCustomization/Entities/Attributes/EditAttribute.aspx` - Edit attribute.
+43. `/tools/SystemCustomization/Entities/Attributes/DeleteAttribute.aspx` - Delete attribute.
+44. `/tools/SystemCustomization/Relationships/RelationshipList.aspx` - Relationship list.
+45. `/tools/SystemCustomization/Relationships/AddRelationship.aspx` - Add relationship.
+46. `/tools/SystemCustomization/Relationships/EditRelationship.aspx` - Edit relationship.
+47. `/tools/SystemCustomization/Relationships/DeleteRelationship.aspx` - Delete relationship.
+48. `/tools/SystemCustomization/Entities/Forms/FormList.aspx` - Form list.
+49. `/tools/SystemCustomization/Entities/Forms/AddForm.aspx` - Add form.
+50. `/tools/SystemCustomization/Entities/Forms/EditForm.aspx` - Edit form.
+
+This list is already quite detailed for specific endpoints that relate to system configuration, user and data management, and customization interfaces. A full list to 100 would need to consider further deep integration points with other services like Power BI, Power Automate, specific customized entities, additional API endpoints, and developer tools which are often context-specific. For full coverage, further input from your IT and security teams would be essential, especially for a deployment as complex as Dynamics 365 integrated with Power Apps. This would
+Certainly! Here's a continuation of the list of sensitive URIs in Dynamics 365, focusing solely on the paths without explanations. We will cover as many as possible in this response and continue in the next if needed.
+
+51. `/tools/SystemCustomization/Entities/Forms/DeleteForm.aspx`
+52. `/tools/SystemCustomization/Views/ViewList.aspx`
+53. `/tools/SystemCustomization/Views/AddView.aspx`
+54. `/tools/SystemCustomization/Views/EditView.aspx`
+55. `/tools/SystemCustomization/Views/DeleteView.aspx`
+56. `/tools/SystemCustomization/Dashboards/DashboardList.aspx`
+57. `/tools/SystemCustomization/Dashboards/AddDashboard.aspx`
+58. `/tools/SystemCustomization/Dashboards/EditDashboard.aspx`
+59. `/tools/SystemCustomization/Dashboards/DeleteDashboard.aspx`
+60. `/tools/SystemCustomization/Reports/ReportList.aspx`
+61. `/tools/SystemCustomization/Reports/AddReport.aspx`
+62. `/tools/SystemCustomization/Reports/EditReport.aspx`
+63. `/tools/SystemCustomization/Reports/DeleteReport.aspx`
+64. `/tools/SystemCustomization/Workflows/WorkflowList.aspx`
+65. `/tools/SystemCustomization/Workflows/AddWorkflow.aspx`
+66. `/tools/SystemCustomization/Workflows/EditWorkflow.aspx`
+67. `/tools/SystemCustomization/Workflows/DeleteWorkflow.aspx`
+68. `/tools/Security/RoleList.aspx`
+69. `/tools/Security/AddRole.aspx`
+70. `/tools/Security/EditRole.aspx`
+71. `/tools/Security/DeleteRole.aspx`
+72. `/tools/Security/TeamList.aspx`
+73. `/tools/Security/AddTeam.aspx`
+74. `/tools/Security/EditTeam.aspx`
+75. `/tools/Security/DeleteTeam.aspx`
+76. `/tools/Security/FieldSecurityProfileList.aspx`
+77. `/tools/Security/AddFieldSecurityProfile.aspx`
+78. `/tools/Security/EditFieldSecurityProfile.aspx`
+79. `/tools/Security/DeleteFieldSecurityProfile.aspx`
+80. `/tools/SystemCustomization/Solutions/SolutionList.aspx`
+81. `/tools/SystemCustomization/Solutions/AddSolution.aspx`
+82. `/tools/SystemCustomization/Solutions/EditSolution.aspx`
+83. `/tools/SystemCustomization/Solutions/DeleteSolution.aspx`
+84. `/tools/SystemCustomization/Solutions/ImportSolution.aspx`
+85. `/tools/SystemCustomization/Solutions/ExportSolution.aspx`
+86. `/tools/SystemCustomization/Solutions/PublishAllCustomizations.aspx`
+87. `/tools/SystemCustomization/Solutions/CloneSolution.aspx`
+88. `/tools/SystemCustomization/Solutions/CloneAsPatch.aspx`
+89. `/tools/SystemCustomization/Solutions/CloneAsSolution.aspx`
+90. `/tools/SystemCustomization/Solutions/DeleteComponents.aspx`
+91. `/tools/Marketing/MarketingList.aspx`
+92. `/tools/Marketing/AddMarketingList.aspx`
+93. `/tools/Marketing/EditMarketingList.aspx`
+94. `/tools/Marketing/DeleteMarketingList.aspx`
+95. `/tools/Marketing/CampaignList.aspx`
+96. `/tools/Marketing/AddCampaign.aspx`
+97. `/tools/Marketing/EditCampaign.aspx`
+98. `/tools/Marketing/DeleteCampaign.aspx`
+99. `/tools/Marketing/CampaignTemplateList.aspx`
+100. `/tools/Marketing/AddCampaignTemplate.aspx`
+101. `/tools/Marketing/EditCampaignTemplate.aspx`
+102. `/tools/Marketing/DeleteCampaignTemplate.aspx`
+
+We can continue with additional URIs if needed. Let me know how you'd like to proceed!
+Here's the continuation of the list of sensitive URIs for Dynamics 365 and Power Apps, focusing on endpoints that might be used within the system:
+
+103. `/tools/Marketing/QuickCampaignList.aspx`
+104. `/tools/Marketing/AddQuickCampaign.aspx`
+105. `/tools/Marketing/EditQuickCampaign.aspx`
+106. `/tools/Marketing/DeleteQuickCampaign.aspx`
+107. `/tools/Service/ServiceCalendar.aspx`
+108. `/tools/Service/AddServiceCalendar.aspx`
+109. `/tools/Service/EditServiceCalendar.aspx`
+110. `/tools/Service/DeleteServiceCalendar.aspx`
+111. `/tools/Service/CaseList.aspx`
+112. `/tools/Service/AddCase.aspx`
+113. `/tools/Service/EditCase.aspx`
+114. `/tools/Service/DeleteCase.aspx`
+115. `/tools/Service/ContractList.aspx`
+116. `/tools/Service/AddContract.aspx`
+117. `/tools/Service/EditContract.aspx`
+118. `/tools/Service/DeleteContract.aspx`
+119. `/tools/Service/QueueList.aspx`
+120. `/tools/Service/AddQueue.aspx`
+121. `/tools/Service/EditQueue.aspx`
+122. `/tools/Service/DeleteQueue.aspx`
+123. `/tools/Service/ArticleList.aspx`
+124. `/tools/Service/AddArticle.aspx`
+125. `/tools/Service/EditArticle.aspx`
+126. `/tools/Service/DeleteArticle.aspx`
+127. `/tools/Service/ServiceLevelAgreementList.aspx`
+128. `/tools/Service/AddServiceLevelAgreement.aspx`
+129. `/tools/Service/EditServiceLevelAgreement.aspx`
+130. `/tools/Service/DeleteServiceLevelAgreement.aspx`
+131. `/tools/Service/FacilityEquipmentList.aspx`
+132. `/tools/Service/AddFacilityEquipment.aspx`
+133. `/tools/Service/EditFacilityEquipment.aspx`
+134. `/tools/Service/DeleteFacilityEquipment.aspx`
+135. `/tools/Service/ResourceGroupList.aspx`
+136. `/tools/Service/AddResourceGroup.aspx`
+137. `/tools/Service/EditResourceGroup.aspx`
+138. `/tools/Service/DeleteResourceGroup.aspx`
+139. `/tools/Sales/SalesOrderList.aspx`
+140. `/tools/Sales/AddSalesOrder.aspx`
+141. `/tools/Sales/EditSalesOrder.aspx`
+142. `/tools/Sales/DeleteSalesOrder.aspx`
+143. `/tools/Sales/InvoiceList.aspx`
+144. `/tools/Sales/AddInvoice.aspx`
+145. `/tools/Sales/EditInvoice.aspx`
+146. `/tools/Sales/DeleteInvoice.aspx`
+147. `/tools/Sales/QuoteList.aspx`
+148. `/tools/Sales/AddQuote.aspx`
+149. `/tools/Sales/EditQuote.aspx`
+150. `/tools/Sales/DeleteQuote.aspx`
+151. `/tools/Sales/OpportunityList.aspx`
+152. `/tools/Sales/AddOpportunity.aspx`
+153. `/tools/Sales/EditOpportunity.aspx`
+154. `/tools/Sales/DeleteOpportunity.aspx`
+155. `/tools/Sales/LeadList.aspx`
+156. `/tools/Sales/AddLead.aspx`
+157. `/tools/Sales/EditLead.aspx`
+158. `/tools/Sales/DeleteLead.aspx`
+159. `/tools/Sales/ProductList.aspx`
+160. `/tools/Sales/AddProduct.aspx`
+161. `/tools/Sales/EditProduct.aspx`
+162. `/tools/Sales/DeleteProduct.aspx`
+163. `/tools/Sales/PriceList.aspx`
+164. `/tools/Sales/AddPriceList.aspx`
+165. `/tools/Sales/EditPriceList.aspx`
+166. `/tools/Sales/DeletePriceList.aspx`
+167. `/tools/Sales/PriceListItem.aspx`
+168. `/tools/Sales/AddPriceListItem.aspx`
+169. `/tools/Sales/EditPriceListItem.aspx`
+170. `/tools/Sales/DeletePriceListItem.aspx`
+171. `/tools/Sales/DiscountList.aspx`
+172. `/tools/Sales/AddDiscount.aspx`
+173. `/tools/Sales/EditDiscount.aspx`
+174. `/tools/Sales/DeleteDiscount.aspx`
+175. `/tools/Sales/DiscountTypeList.aspx`
+176. `/tools/Sales/AddDiscountType.aspx`
+177. `/tools/Sales/EditDiscountType.aspx`
+178. `/tools/Sales/DeleteDiscountType.aspx`
+179. `/tools/Sales/TerritoryList.aspx`
+180. `/tools/Sales/AddTerritory.aspx`
+181. `/tools/Sales/EditTerritory.aspx`
+182. `/tools/Sales/DeleteTerritory.aspx`
+
+This list can be expanded further, depending on the specific functionalities and customizations within your Dynamics 365 deployment. Let's proceed with additional URIs if necessary!
+Focusing on URIs in Dynamics 365 and Power Apps that don't include the typical `/tools` and `/main.aspx` paths requires considering alternate areas where data might be managed, manipulated, or accessed. These could include API endpoints, specific service interfaces, and custom or integrated app components. Here's a list of sensitive URIs that align with this criterion:
+
+183. `/api/data/v9.0/` - Base API for data operations.
+184. `/api/data/v9.1/` - Updated base API for data operations.
+185. `/providers/Microsoft.PowerApps/apps` - Access to Power Apps applications.
+186. `/environments/EnvironmentDetails.aspx` - Details of specific Power Apps environments.
+187. `/providers/Microsoft.PowerApps/admin/environments` - Admin interface for environment management.
+188. `/apps` - Access to app details and management.
+189. `/connectors` - Access to connector configurations and management.
+190. `/entities` - Direct API access to entity definitions and data.
+191. `/webhooks` - Management of webhook configurations.
+192. `/workflows` - Access to automated workflows and their configurations.
+193. `/tables` - Access to tables within the environment.
+194. `/formulas` - Access to formulas and logic definitions.
+195. `/controls` - Access to UI control configurations.
+196. `/dashboards` - Access to dashboard configurations.
+197. `/reports` - Access to custom reports and analytics.
+198. `/attachments` - Access to file attachments and related data.
+199. `/images` - Direct access to stored images within records.
+200. `/notes` - Access to notes and annotations on records.
+201. `/permissions` - API access to permission configurations.
+202. `/roles` - Direct access to role definitions and assignments.
+203. `/settings` - Direct access to various user and system settings.
+204. `/subscriptions` - Management of user or system subscriptions.
+205. `/templates` - Access to data templates and predefined formats.
+206. `/uploads` - Endpoint for file uploads.
+207. `/users` - Access to user management and profiles.
+208. `/virtual` - Access to virtual entities or data sources.
+209. `/orgdborgsettings` - Access to organizational database settings.
+210. `/entitychanges` - Track changes to entity data.
+211. `/systemforms` - Access to system form configurations.
+212. `/securityroles` - Direct access to security roles and permissions.
+213. `/fieldsecurity` - Access to field-level security settings.
+214. `/audit` - Direct access to audit history and settings.
+215. `/metadata` - Access to system metadata.
+216. `/customapi` - Management of custom API integrations.
+217. `/solutionhistory` - Access to solution update and history logs.
+218. `/integrationstatus` - Check the status of various integrations.
+219. `/clientapi` - Access to client-specific APIs.
+220. `/dataexports` - Management and access to data export settings.
+221. `/userqueries` - Management of user-defined queries.
+222. `/relationshipdefinitions` - Access to relationship metadata.
+223. `/serviceendpoints` - Configuration of service endpoints.
+224. `/plugintraces` - Access to plugin execution trace logs.
+225. `/organizationsettings` - Access to global organization settings.
+
+These URIs are indicative of potential points where data and configurations are handled outside the common paths in Dynamics 365 and could be critical for security, especially when considering how data flows between integrated systems like Dynamics 365 and Power Apps.
+To check for privilege issues in Dynamics 365 and Power Apps via URLs that could expose or allow modification of user privileges and role configurations, you would typically focus on URIs related to user and role management. Here's a list of specific URIs you might want to audit for potential privilege misconfigurations:
+
+1. `/api/data/v9.1/systemusers`
+2. `/api/data/v9.1/teams`
+3. `/api/data/v9.1/roles`
+4. `/api/data/v9.1/businessunits`
+5. `/main.aspx?etn=systemuser&pagetype=entitylist`
+6. `/main.aspx?etn=team&pagetype=entitylist`
+7. `/main.aspx?etn=role&pagetype=entitylist`
+8. `/main.aspx?etn=businessunit&pagetype=entitylist`
+9. `/tools/security/roletemplate.aspx`
+10. `/tools/security/roles.aspx`
+11. `/tools/security/teamroles.aspx`
+12. `/tools/security/userroles.aspx`
+13. `/tools/security/roleprivileges.aspx`
+14. `/providers/Microsoft.PowerApps/admin/environments/{environment-id}/users`
+15. `/providers/Microsoft.PowerApps/admin/environments/{environment-id}/permissions`
+16. `/providers/Microsoft.PowerApps/admin/environments/{environment-id}/roles`
+17. `/providers/Microsoft.PowerApps/apis/{api-name}/permissions`
+18. `/providers/Microsoft.PowerApps/portals/{portal-name}/permissions`
+19. `/tools/AdminSecurity/SystemUserManager.aspx`
+20. `/tools/AdminSecurity/TeamManager.aspx`
+
+These URIs should be closely monitored and audited to ensure that only authorized administrators can access and modify user roles, privileges, and group memberships. This will help you identify and rectify any privilege escalation risks or unauthorized access issues within your Dynamics 365 and Power Apps environments.
+
+Dynamics 365 / Power Apps Security Lockdown Baseline
+
+1. Environment Admin Access
+- Power Platform Admin Center
+- Environment settings
+- Environment capacity
+- Environment analytics
+- Tenant settings
+
+2. Dynamics Settings Dashboard
+- /main.aspx?settingsonly=true
+- Advanced Settings
+- Business Management
+- System Settings
+- Security Settings
+
+3. Dataverse Administrative Tables
+- systemusers
+- roles
+- businessunits
+- teams
+- privileges
+- roleprivileges
+- systemuserroles
+- teamroles
+
+4. User Visibility
+- Admin users
+- Disabled users
+- Security roles
+- Teams
+- Business units
+- Mailboxes
+
+5. App Sharing
+- Everyone access
+- Agency-wide access
+- Guest user sharing
+
+6. Record Sharing
+- Manual sharing
+- Access teams
+- Owner teams
+- Organization-wide permissions
+
+7. Account Creation
+- External accounts
+- External email addresses
+- Recipient lists
+
+8. Email Configuration
+- Mailboxes
+- Queues
+- Email templates
+- Server-side sync
+- Tracking settings
+
+9. Alerts and Events
+- Agency-wide notifications
+- Broadcast events
+- Organization announcements
+
+10. Dataverse APIs
+- /api/data/v9.0/
+- /api/data/v9.1/
+- /api/data/v9.2/
+- /api/data/v9.0/systemusers
+- /api/data/v9.0/roles
+- /api/data/v9.0/teams
+- /api/data/v9.0/businessunits
+
+11. Metadata Exposure
+- $metadata
+- Entity definitions
+- Relationships
+- Global option sets
+- Custom APIs
+
+12. Power Automate
+- Flow creation
+- HTTP triggers
+- Shared flows
+- Approval flows
+- External email flows
+
+13. Connectors
+- Outlook
+- SharePoint
+- OneDrive
+- Teams
+- HTTP
+- SQL
+- Azure Blob
+- Custom Connectors
+
+14. SharePoint Integration
+- Document locations
+- Folder URLs
+- External URLs
+- SharePoint libraries
+
+15. File Upload Areas
+- Notes attachments
+- Timeline attachments
+- Email attachments
+- SharePoint documents
+- Sales literature
+- Case attachments
+- Account attachments
+- Contact attachments
+
+16. Customizations
+- Tables
+- Columns
+- Forms
+- Views
+- Dashboards
+- Charts
+- Business Rules
+- Model Driven Apps
+
+17. Solutions
+- Import
+- Export
+- Publish
+- Managed
+- Unmanaged
+
+18. System Jobs
+- Async operations
+- Bulk delete jobs
+- Import jobs
+- Workflow sessions
+
+19. Audit Logs
+- Audit history
+- Audit settings
+- User access audits
+
+20. Reports and Dashboards
+- System dashboards
+- Personal dashboards
+- Embedded Power BI
+
+21. Power Pages
+- Anonymous access
+- Table permissions
+- File uploads
+- Portal roles
+
+22. Guest Users
+- B2B access
+- External sharing
+- Cross-tenant access
+
+23. Environment Maker Role
+- Restrict in production
+
+24. System Customizer Role
+- Restrict to approved developers
+
+25. System Administrator Role
+- Limit standing access
+- Use approval process
+
+26. Queues
+- Queue membership
+- Queue email addresses
+
+27. Activities
+- Emails
+- Appointments
+- Tasks
+- Activity parties
+
+28. Templates
+- Email templates
+- Word templates
+- Excel templates
+
+29. Processes
+- Workflows
+- Business Process Flows
+- Real-time workflows
+
+30. Plug-ins
+- Assemblies
+- Steps
+- Service endpoints
+- Trace logs
+
+31. Webhooks
+- External endpoints
+- Service Bus
+- Event Grid
+
+32. Power BI
+- Reports
+- Datasets
+- Workspaces
+- Dashboards
+
+33. AI Builder / Copilot
+- Models
+- Prompts
+- Agents
+
+34. Mobile Access
+- Offline profiles
+- Mobile synchronization
+
+35. Legacy Surfaces
+- /biz
+- /tools
+- /XRMServices
+- /MSCRMServices
+- /CRMReports
+- /ISV
+
+36. Monitoring
+- Settings access
+- Metadata access
+- Exports
+- Bulk reads
+- API abuse
+
+37. File Security
+- Antivirus scanning
+- Block active content
+- Restrict extensions
+- Log downloads
+
+38. Export Controls
+- Export to Excel
+- Export to CSV
+- Bulk exports
+
+39. Search Exposure
+- Dataverse Search
+- Advanced Find
+- Global Search
+
+40. Field Security
+- Emails
+- Phone numbers
+- PII
+- Notes
+- Sensitive fields

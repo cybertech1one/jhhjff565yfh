@@ -1,0 +1,249 @@
+
+Dynamics 365 / Power Apps Security Lockdown Baseline
+
+1. Environment Admin Access
+- Power Platform Admin Center
+- Environment settings
+- Environment capacity
+- Environment analytics
+- Tenant settings
+
+2. Dynamics Settings Dashboard
+- /main.aspx?settingsonly=true
+- Advanced Settings
+- Business Management
+- System Settings
+- Security Settings
+
+3. Dataverse Administrative Tables
+- systemusers
+- roles
+- businessunits
+- teams
+- privileges
+- roleprivileges
+- systemuserroles
+- teamroles
+
+4. User Visibility
+- Admin users
+- Disabled users
+- Security roles
+- Teams
+- Business units
+- Mailboxes
+
+5. App Sharing
+- Everyone access
+- Agency-wide access
+- Guest user sharing
+
+6. Record Sharing
+- Manual sharing
+- Access teams
+- Owner teams
+- Organization-wide permissions
+
+7. Account Creation
+- External accounts
+- External email addresses
+- Recipient lists
+
+8. Email Configuration
+- Mailboxes
+- Queues
+- Email templates
+- Server-side sync
+- Tracking settings
+
+9. Alerts and Events
+- Agency-wide notifications
+- Broadcast events
+- Organization announcements
+
+10. Dataverse APIs
+- /api/data/v9.0/
+- /api/data/v9.1/
+- /api/data/v9.2/
+- /api/data/v9.0/systemusers
+- /api/data/v9.0/roles
+- /api/data/v9.0/teams
+- /api/data/v9.0/businessunits
+
+11. Metadata Exposure
+- $metadata
+- Entity definitions
+- Relationships
+- Global option sets
+- Custom APIs
+
+12. Power Automate
+- Flow creation
+- HTTP triggers
+- Shared flows
+- Approval flows
+- External email flows
+
+13. Connectors
+- Outlook
+- SharePoint
+- OneDrive
+- Teams
+- HTTP
+- SQL
+- Azure Blob
+- Custom Connectors
+
+14. SharePoint Integration
+- Document locations
+- Folder URLs
+- External URLs
+- SharePoint libraries
+
+15. File Upload Areas
+- Notes attachments
+- Timeline attachments
+- Email attachments
+- SharePoint documents
+- Sales literature
+- Case attachments
+- Account attachments
+- Contact attachments
+
+16. Customizations
+- Tables
+- Columns
+- Forms
+- Views
+- Dashboards
+- Charts
+- Business Rules
+- Model Driven Apps
+
+17. Solutions
+- Import
+- Export
+- Publish
+- Managed
+- Unmanaged
+
+18. System Jobs
+- Async operations
+- Bulk delete jobs
+- Import jobs
+- Workflow sessions
+
+19. Audit Logs
+- Audit history
+- Audit settings
+- User access audits
+
+20. Reports and Dashboards
+- System dashboards
+- Personal dashboards
+- Embedded Power BI
+
+21. Power Pages
+- Anonymous access
+- Table permissions
+- File uploads
+- Portal roles
+
+22. Guest Users
+- B2B access
+- External sharing
+- Cross-tenant access
+
+23. Environment Maker Role
+- Restrict in production
+
+24. System Customizer Role
+- Restrict to approved developers
+
+25. System Administrator Role
+- Limit standing access
+- Use approval process
+
+26. Queues
+- Queue membership
+- Queue email addresses
+
+27. Activities
+- Emails
+- Appointments
+- Tasks
+- Activity parties
+
+28. Templates
+- Email templates
+- Word templates
+- Excel templates
+
+29. Processes
+- Workflows
+- Business Process Flows
+- Real-time workflows
+
+30. Plug-ins
+- Assemblies
+- Steps
+- Service endpoints
+- Trace logs
+
+31. Webhooks
+- External endpoints
+- Service Bus
+- Event Grid
+
+32. Power BI
+- Reports
+- Datasets
+- Workspaces
+- Dashboards
+
+33. AI Builder / Copilot
+- Models
+- Prompts
+- Agents
+
+34. Mobile Access
+- Offline profiles
+- Mobile synchronization
+
+35. Legacy Surfaces
+- /biz
+- /tools
+- /XRMServices
+- /MSCRMServices
+- /CRMReports
+- /ISV
+
+36. Monitoring
+- Settings access
+- Metadata access
+- Exports
+- Bulk reads
+- API abuse
+
+37. File Security
+- Antivirus scanning
+- Block active content
+- Restrict extensions
+- Log downloads
+
+38. Export Controls
+- Export to Excel
+- Export to CSV
+- Bulk exports
+
+39. Search Exposure
+- Dataverse Search
+- Advanced Find
+- Global Search
+
+40. Field Security
+- Emails
+- Phone numbers
+- PII
+- Notes
+- Sensitive fields
